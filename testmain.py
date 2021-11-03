@@ -1,4 +1,5 @@
 from classes import *
+import requests
 
 def GetTest(WS):
     response = WS.GET("api/v0/process_state/active", printToggle=True, jsonToggle=True)
@@ -36,6 +37,7 @@ def ImageTest(WS):
 
 
 def main():
+    '''
     weldingWorkstation = {
         "ip": "10.19.13.32",
         "name": "Welding Workstation"
@@ -46,6 +48,11 @@ def main():
     DisplayTest(WS)
     # GetTest(WS)
     # ImageTest(WS)
+    '''
+    response = requests.get('https://seats-api.seatsinc.com/ords/api1/color_legend/json?empid=9146&workOrderNumber=SP44092197&workCenterNo=4209&orderType=SO&pkey=PsUxHibfqpoZKUiHBGkcXQTkU')
+    print(response.text)
+    print(response)
+
 
     
 
