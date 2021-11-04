@@ -5,8 +5,8 @@ def GetTest(WS):
     response = WS.GET("api/v0/process_state/active", printToggle=True, jsonToggle=True)
     WS.PrintOverview()
 
-def DisplayTest(WS):
-    WS.Scoreboard.Display(line1="Test", line2="Time: " + datetime.now().strftime("%H:%M:%S"), time=5)
+def DisplayTest(WS, text1 = "Test1"):
+    WS.Scoreboard.Display(line1=text1, line2="Time: " + datetime.now().strftime("%H:%M:%S"), time=5)
     #WS.Scoreboard.DisplayNonsense("", "Test", time=1)
 
 def ImageTest(WS):
@@ -37,21 +37,23 @@ def ImageTest(WS):
 
 
 def main():
-    '''
+    
     weldingWorkstation = {
-        "ip": "10.19.13.32",
+        "ip": "10.19.13.8",
         "name": "Welding Workstation"
     } 
     WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
     
-    # WS.Scoreboard.Open()
-    DisplayTest(WS)
+    WS.Scoreboard.Open()
+    DisplayTest(WS, text1 = "2 + 2 = 22")
     # GetTest(WS)
     # ImageTest(WS)
+    
     '''
     response = requests.get('https://seats-api.seatsinc.com/ords/api1/color_legend/json?empid=9146&workOrderNumber=SP44092197&workCenterNo=4209&orderType=SO&pkey=PsUxHibfqpoZKUiHBGkcXQTkU')
     print(response.text)
     print(response)
+    '''
 
 
     
