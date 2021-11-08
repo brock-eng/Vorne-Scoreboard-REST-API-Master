@@ -15,7 +15,7 @@ def AddWorkstation(name, ip, dept) -> None:
     }
 
 def Save() -> None:
-    
+
     pass
 
 def test():
@@ -25,5 +25,6 @@ def test():
     AddWorkstation("test1", "none", "none")
     testData2 = LoadWorkstation(name="test1")
     print(testData2)
+
 
 if __name__ == '__main__': test()
