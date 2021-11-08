@@ -18,7 +18,7 @@ class Scoreboard:
         displayObject = self.CreateTextObject(line1, line2, line3, time)
         # print(displayObject)
         response = self.ws.POST("api/v0/scoreboard/overlay", json.dumps(displayObject))
-        print('Display: ', response)
+        print(datetime.now().strftime("%H:%M:%S"), ' - Display: ', response)
 
     # Continuously prints some random characters to the screen
     def DisplayNonsense(self, line1 = "", line2 = "", line3 = "", time=10) -> None:

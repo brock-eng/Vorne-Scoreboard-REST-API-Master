@@ -11,12 +11,14 @@ data = {
         "welding1" : {
             "id"    : 1,
             "ip"    : "10.19.13.8",
-            "dept"  : "Welding"
+            "dept"  : "Welding",
+            "name"  : "test"
         },
-        "welding2" : {
+        "test1" : {
             "id"    : 2,
-            "ip"    : None,
-            "dept"  : "Welding"
+            "ip"    : "10.19.15.24",
+            "dept"  : "Zach's Office",
+            "name"  : "Test Scoreboard"
         }
     }
 } 
