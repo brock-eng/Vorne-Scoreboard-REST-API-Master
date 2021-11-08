@@ -1,6 +1,6 @@
 from ws_data import data
 
-def LoadWorkstation(name=None):
+def LoadWorkstation(name = None):
     if name == None and id == None:
         return None
     elif name != None:
@@ -13,6 +13,10 @@ def AddWorkstation(name, ip, dept) -> None:
         "ip" : ip,
         "dept" : dept
     }
+
+def Save() -> None:
+    
+    pass
 
 def test():
     print(data["workstations"]["welding1"]["ip"])

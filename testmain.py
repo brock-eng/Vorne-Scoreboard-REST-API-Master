@@ -12,7 +12,6 @@ def DisplayTest(WS, text1 = "Test1"):
     #WS.Scoreboard.DisplayNonsense("", "Test", time=1)
 
 def ImageTest(WS):
-    # WS.Scoreboard.Open()
     response = WS.GET('api/v0/scoreboard/graphic/image')
     print('Image Data: ', response.apparent_encoding)
     response_bytes = bytearray(response.content)
@@ -20,7 +19,6 @@ def ImageTest(WS):
     for i in range(len(response_bytes)):
         response_bytes[i] = 2
 
-    # print(response_bytes)
     final_image = bytes(response_bytes)
     response = WS.Scoreboard.PrintImage(final_image)
     
@@ -32,7 +30,6 @@ def ImageTest(WS):
     for i in range(len(response_bytes)):
         response_bytes[i] = 2
 
-    # print(response_bytes)
     final_image = bytes(response_bytes)
     print('Final output: ', len(final_image))
     response = WS.Scoreboard.PrintImage(final_image)
@@ -56,7 +53,7 @@ def main():
     i = 0
     while True:
         try: 
-            WS2.Scoreboard.Display("Display.py run - " + str(i), datetime.now().strftime("%H:%M:%S"))
+            WS2.Scoreboard.Display("Python Connected", time = timeHours)
         except:
             print("Error connecting to display.")
 
