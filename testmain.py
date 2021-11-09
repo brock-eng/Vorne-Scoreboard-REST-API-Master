@@ -2,6 +2,9 @@ from classes import *
 from ws_data import data
 import time
 import requests
+import keyboard
+
+from bytecanvas import ByteCanvas
 
 def GetTest(WS):
     response = WS.GET("api/v0/process_state/active", printToggle=True, jsonToggle=True)
@@ -13,43 +16,118 @@ def DisplayTest(WS, text1 = "Test1"):
 
 def ImageTest(WS):
     response = WS.GET('api/v0/scoreboard/graphic/image')
-    print('Image Data: ', response.apparent_encoding)
     response_bytes = bytearray(response.content)
-    print('Byte Array Size: ',len(response_bytes))
+    print(len(response_bytes))
     for i in range(len(response_bytes)):
-        response_bytes[i] = 2
+        response_bytes[i] = 0
+    for i in range(50):
+        response_bytes[i] = (i % 50)
 
     final_image = bytes(response_bytes)
     response = WS.Scoreboard.PrintImage(final_image)
-    
-    response = WS.GET('api/v0/scoreboard/graphic/image')
-    print(response.apparent_encoding)
-    response_bytes = bytearray(response.content)
-    # print(response_bytes)
-    # print(len(response_bytes))
-    for i in range(len(response_bytes)):
-        response_bytes[i] = 2
 
-    final_image = bytes(response_bytes)
-    print('Final output: ', len(final_image))
-    response = WS.Scoreboard.PrintImage(final_image)
+def BounceProgram():
+    newCanvas = ByteCanvas()
 
-
-def main():
-    
     weldingWorkstation = data["workstations"]["welding1"]
     testWorkstation = data["workstations"]["test1"]
-    WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
-    WS2 = WorkStation(testWorkstation['ip'], testWorkstation['name'])
+    # WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
+    WS = WorkStation(testWorkstation['ip'], testWorkstation['name'])
+    x = 3
+    y = 0
+    vX = 1
+    vY = 1
+    isRunning = True
+    while isRunning:
 
-    # WS.Scoreboard.Open()
-    # DisplayTest(WS, text1 = "Hello World")
-    # GetTest(WS)
-    # ImageTest(WS)
+        newCanvas.ClearPixel(x, y)
+
+        x += vX
+        y += vY
+
+        if (x >= 79): 
+            vX = -1
+        else:
+            if x <= 0: 
+                vX = 1
+
+        if (y >= 31): 
+            vY = -1
+        else:
+            if y <= 0: vY = 1
+
+        newCanvas.PaintPixel(x, y, 'G1')
+        WS.Scoreboard.PrintImage(newCanvas.Output())
+
+        time.sleep(0.1)
+
+        if keyboard.is_pressed('q'):
+            isRunning = False
+
+def ControlProgram():
+    newCanvas = ByteCanvas()
+
+    weldingWorkstation = data["workstations"]["welding1"]
+    testWorkstation = data["workstations"]["test1"]
+    # WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
+    WS = WorkStation(testWorkstation['ip'], testWorkstation['name'])
+    x = 40
+    y = 16
+    vX = 1
+    vY = 1
+    isRunning = True
+    deleteMode = True
+    color = 7
+    size = 10
+    while isRunning:
+
+        if deleteMode:
+            newCanvas.Fill(x, y, x + size, y + size, 0)
+
+        if keyboard.is_pressed('up'):
+            y += -1
+        if keyboard.is_pressed('left'):
+            x += -1
+        if keyboard.is_pressed('right'):
+            x += 1
+        if keyboard.is_pressed('down'):
+            y += 1
+
+        if keyboard.is_pressed('shift'):
+            color += 1
+
+        if keyboard.is_pressed('ctrl'):
+            color -= 1
+
+        if color < 0:
+            color = 0
+        if keyboard.is_pressed('d'):
+            print(color)
+
+        newCanvas.Fill(x, y, x + size, y + size, color)
+        WS.Scoreboard.PrintImage(newCanvas.Output())
+
+        time.sleep(0.1)
+
+        if keyboard.is_pressed('q'):
+            isRunning = False
+        
+        if keyboard.is_pressed('enter'):
+            deleteMode = not deleteMode
+
+def main():
+    BounceProgram()
+    # ControlProgram()
+ 
+    
+
+    
+    
+    return
 
     timeHours = 60 * 60 * 2
-    WS2.Scoreboard.Open()
-    
+    WS2 = WorkStation(testWorkstation['ip'], testWorkstation['name'])
+
     i = 0
     while True:
         try: 
@@ -59,8 +137,6 @@ def main():
 
         time.sleep(20)
         i += 1
-    
-
 
     
     '''

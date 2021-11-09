@@ -1,12 +1,13 @@
 import requests
 import webbrowser
 import json
-import os
 import time
 from datetime import date, datetime
 import random
 
 sleep = lambda t: time.sleep(t)
+
+
 
 # Scoreboard specific methods (displaying text, etc.)
 class Scoreboard:
@@ -34,9 +35,21 @@ class Scoreboard:
 
     # Warning display message
     def PrintImage(self, byteInformation):
-        response = self.ws.POST("api/v0/scoreboard/graphic/image?x=0&y=0&w=80&h=32", byteInformation)
-        print('Image Print: ', response)
+        response = self.ws.POST("api/v0/scoreboard/graphic/image?x=0&y=0&w=80&h=32", byteInformation, headersIn={'Content-Type': 'application/octet-stream'})
+        if response.status_code != 200:
+            print("HTTP ERROR: ", response.status_code)
         return response
+    
+    # Set the scoreboard display setting
+    def SetImageDisplay(self, status) -> bool:
+        if status not in ['none', 'under', 'trans', 'over']:
+            return False
+        else:
+            response = self.ws.POST('api/v0/scoreboard/graphic/mode', json.dumps({'value' : status}))
+            if response.status_code == 200:
+                return True
+            else:
+                return False
 
     # Opens Scoreboard in the web browser
     def Open(self):
@@ -53,6 +66,13 @@ class Scoreboard:
             ]
         }
         return displayObject
+
+    # Turns the scoreboard 'off'
+    # Note that this doesn't actually turn off the power
+    # Instead it displays a blank image overlay using direct screen control
+    def TurnOff(self):
+        imageMapBytes = bytes(7860)
+        self.SetImageDisplay(imageMapBytes)
 
 
 # Class that holds all API methods for interacting with a Workstations Vorne scoreboard
@@ -87,9 +107,12 @@ class WorkStation:
             return response
 
     # Posts a value to a destination query in http
-    def POST(self, query, setValue):
+    def POST(self, query, setValue, headersIn = ""):
         requestIP = self.ip + query
-        return requests.post(requestIP, setValue)
+        if (headersIn != ''):
+            return requests.post(requestIP, setValue)
+        else:
+            return requests.post(requestIP, setValue, headers = headersIn)
 
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):

@@ -5,14 +5,13 @@ data = {
         "Metals",
         "Final Assembly"
     ],
-
+    "total" : 2,
     "workstations" : {
-        "total" : 2,
         "welding1" : {
             "id"    : 1,
             "ip"    : "10.19.13.8",
             "dept"  : "Welding",
-            "name"  : "test"
+            "name"  : "Welding1"
         },
         "test1" : {
             "id"    : 2,
