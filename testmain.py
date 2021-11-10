@@ -33,17 +33,40 @@ def BounceProgram():
     testWorkstation = data["workstations"]["test1"]
     # WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
     WS = WorkStation(testWorkstation['ip'], testWorkstation['name'])
+
+    newCanvas.DrawLine(40, 0, 40, 32, 'R4')
+    # newCanvas.DrawCircle(40, 10, 7, 'G3')
+    # newCanvas.Fill(20, 10, 30, 20, 'R4')
     x = 3
     y = 0
     vX = 1
     vY = 1
     isRunning = True
     while isRunning:
-
         newCanvas.ClearPixel(x, y)
 
         x += vX
         y += vY
+
+        # Collision detection
+        if bool(newCanvas.GetPixel(x, y)):
+            newCanvas.PaintPixel(x, y, 'BLANK')
+            x -= vX
+            y -= vY
+            vX = -vX
+            vY = -vY
+        else:
+            # Collides with x-wall
+            if bool(newCanvas.GetPixel(x-vX, y)):
+                newCanvas.PaintPixel(x-vX, y, 'BLANK')
+                x -= vX
+                vX = -vX
+            else:
+                # Collides with y-wall
+                if bool(newCanvas.GetPixel(x, y - vY)):
+                    newCanvas.PaintPixel(x, y - vY, 'BLANK')
+                    y -= vY
+                    vY = -vY
 
         if (x >= 79): 
             vX = -1
@@ -58,7 +81,7 @@ def BounceProgram():
 
         newCanvas.PaintPixel(x, y, 'G1')
         WS.Scoreboard.PrintImage(newCanvas.Output())
-
+        
         time.sleep(0.1)
 
         if keyboard.is_pressed('q'):
@@ -79,6 +102,7 @@ def ControlProgram():
     deleteMode = True
     color = 7
     size = 10
+    
     while isRunning:
 
         if deleteMode:
@@ -106,7 +130,7 @@ def ControlProgram():
 
         newCanvas.Fill(x, y, x + size, y + size, color)
         WS.Scoreboard.PrintImage(newCanvas.Output())
-
+        
         time.sleep(0.1)
 
         if keyboard.is_pressed('q'):

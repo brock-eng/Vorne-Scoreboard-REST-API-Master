@@ -33,6 +33,11 @@ class ByteCanvas:
 
         self.bytecanvas[x + y * self.WIDTH] = value
 
+    # returns the pixel value at a specified location
+    # refer to 'COLORS' dictionary for the int return value
+    def GetPixel(self, x, y) -> int:
+        return int(self.bytecanvas[x + y * self.WIDTH])
+
     # Sets a specified pixel to no-color
     def ClearPixel(self, x, y):
         self.bytecanvas[x + y * self.WIDTH] = 0
@@ -55,6 +60,7 @@ class ByteCanvas:
     def Output(self):
         return bytes(self.bytecanvas)
 
+    # Draws a line connecting two sets of x,y points
     def DrawLine(self, x1, y1, x2, y2, value):
         dy = y2 - y1
         dx = x2 - x1
@@ -70,6 +76,7 @@ class ByteCanvas:
             else:
                 self.DrawLineHigh(x1, y1, x2, y2, value)
 
+    # Should not be called, line subfunction
     def DrawLineLow(self, x1, y1, x2, y2, value):
         dy = y2 - y1
         dx = x2 - x1
@@ -91,6 +98,7 @@ class ByteCanvas:
                 D += 2 * dy
             x += 1
 
+    # Should not be called, line subfunction
     def DrawLineHigh(self, x1, y1, x2, y2, value):
         dy = y2 - y1
         dx = x2 - x1
@@ -111,6 +119,32 @@ class ByteCanvas:
             else:
                 D += 2 * dx
             y += 1
+
+    def DrawCircle(self, xc, yc, r, color):
+        x = 0
+        y = r
+        d = 3 - 2 * r
+        self.Circle(xc, yc, x, y, color)
+        while (y >= x):
+            if (d > 0):
+                d += 4 * (x - y) + 10
+                x+=1
+                y-=1
+            else:
+                 d += 4 * x + 6
+                 x+=1
+            self.Circle(xc, yc, x, y, color)
+  
+
+    def Circle(self, xc, yc, x, y, color):
+        self.PaintPixel(xc + y, yc + x, color)
+        self.PaintPixel(xc - x, yc - y, color)
+        self.PaintPixel(xc - y, yc - x, color)
+        self.PaintPixel(xc + y, yc - x, color)
+        self.PaintPixel(xc + x, yc - y, color)
+        self.PaintPixel(xc - x, yc + y, color)
+        self.PaintPixel(xc - y, yc + x, color)
+        self.PaintPixel(xc + x, yc + y, color)
 
 def main():
     testCanvas = ByteCanvas()
