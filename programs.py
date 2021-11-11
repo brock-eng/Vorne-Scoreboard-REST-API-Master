@@ -37,6 +37,7 @@ class Program:
                 vX = -vX
                 yNotTriggered = False
             # Collides with y-wall
+            
             if bool(newCanvas.GetPixel(x-vX, y)):
                 newCanvas.PaintPixel(x-vX, y, 'BLANK')
                 y -= vY
@@ -66,7 +67,7 @@ class Program:
             newCanvas.PaintPixel(x, y, 'R1')
             WS.Scoreboard.PrintImage(newCanvas.Output())
             
-            time.sleep(0.1)
+            time.sleep(0.04)
 
             # Quit if q is pressed
             if keyboard.is_pressed('q'):
