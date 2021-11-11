@@ -34,40 +34,43 @@ def BounceProgram():
     # WS = WorkStation(weldingWorkstation['ip'], weldingWorkstation['name'])
     WS = WorkStation(testWorkstation['ip'], testWorkstation['name'])
 
-    newCanvas.DrawLine(40, 0, 40, 32, 'R4')
-    # newCanvas.DrawCircle(40, 10, 7, 'G3')
-    # newCanvas.Fill(20, 10, 30, 20, 'R4')
-    x = 3
-    y = 0
+    # newCanvas.DrawLine(40, 0, 40, 32, 'G4')
+    newCanvas.Fill(0, 0, 80, 31, 'G4')
+    newCanvas.Fill(35, 14, 45, 18, 'BLANK')
+    
+    x = 40
+    y = 16
     vX = 1
     vY = 1
     isRunning = True
     while isRunning:
+        # Clear the previous 'ball' position
         newCanvas.ClearPixel(x, y)
 
         x += vX
         y += vY
-
-        # Collision detection
-        if bool(newCanvas.GetPixel(x, y)):
-            newCanvas.PaintPixel(x, y, 'BLANK')
+        
+        # Collides with x-wall
+        if bool(newCanvas.GetPixel(x, y - vY)):
+            newCanvas.PaintPixel(x, y - vY, 'BLANK')
             x -= vX
-            y -= vY
             vX = -vX
+            yNotTriggered = False
+        # Collides with y-wall
+        if bool(newCanvas.GetPixel(x-vX, y)):
+            newCanvas.PaintPixel(x-vX, y, 'BLANK')
+            y -= vY
             vY = -vY
-        else:
-            # Collides with x-wall
-            if bool(newCanvas.GetPixel(x-vX, y)):
-                newCanvas.PaintPixel(x-vX, y, 'BLANK')
+        else: # Collides with corner-wall
+            if bool(newCanvas.GetPixel(x, y) and yNotTriggered):
+                newCanvas.PaintPixel(x, y, 'BLANK')
                 x -= vX
+                y -= vY
                 vX = -vX
-            else:
-                # Collides with y-wall
-                if bool(newCanvas.GetPixel(x, y - vY)):
-                    newCanvas.PaintPixel(x, y - vY, 'BLANK')
-                    y -= vY
-                    vY = -vY
+                vY = -vY
+        yNotTriggered = False    
 
+        # Collision with screen borders
         if (x >= 79): 
             vX = -1
         else:
@@ -79,11 +82,13 @@ def BounceProgram():
         else:
             if y <= 0: vY = 1
 
-        newCanvas.PaintPixel(x, y, 'G1')
+        # Update the ball position
+        newCanvas.PaintPixel(x, y, 'R1')
         WS.Scoreboard.PrintImage(newCanvas.Output())
         
         time.sleep(0.1)
 
+        # Quit if q is pressed
         if keyboard.is_pressed('q'):
             isRunning = False
 
@@ -142,10 +147,6 @@ def ControlProgram():
 def main():
     BounceProgram()
     # ControlProgram()
- 
-    
-
-    
     
     return
 
