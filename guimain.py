@@ -1,8 +1,13 @@
 from webbrowser import Error
+from tkinter import *
+
+import threading
+
 from classes import *
 from ws_data import data
-from tkinter import *
-import subprocess
+from bytecanvas import *
+
+from programs import Program
 
 class Application(Frame):
     
@@ -19,16 +24,17 @@ class Application(Frame):
         # Formatting Widgets
         self.Build()
 
-        # Keybinds
+        # Keybinds / Handlers
         self.root.bind('<Return>', self.RunCommand)
         self.root.bind('<Up>', self.GetRecentCommandUp)
         self.root.bind('<Down>', self.GetRecentCommandDown)
+        self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
 
         # Misc class variables
         self.cmdHistory = list()
         self.cmdHistoryIndex = 0
+        self.runningPrograms = dict()
         
-
     # Builds application gui
     def Build(self):
         self.consoleOutputLabel.place(x = 0)
@@ -38,6 +44,13 @@ class Application(Frame):
         self.consoleOutput.pack(fill = X)
 
         self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
+
+    # Window close handling
+    def OnClose(self):
+        for program in self.runningPrograms:
+            self.runningPrograms[program].Stop()
+        
+        self.root.destroy()
 
     # up-arrow for selecting a recent cmd
     def GetRecentCommandUp(self, event):
@@ -71,6 +84,7 @@ class Application(Frame):
             'MSG'       : self.Message,
             'WRITE'     : self.Message,
             'DISPLAY'   : self.Display,
+            'DISP'      : self.Display,
             'STOP'      : self.Close,
             'QUIT'      : self.Close,
             'CLOSE'     : self.Close
@@ -84,13 +98,13 @@ class Application(Frame):
         try:
             commands[cmd](arguments)
         except KeyError as error:
-            self.OutputConsole('Command not found')
+            self.OutputConsole('Command argument/sub-argument not found.')
             self.OutputConsole({error})
         except IndexError as error:
             self.OutputConsole('Improper command arguments.  Type {help cmd} for cmd usage.')
             self.OutputConsole({error})
         except BaseException as error:
-            self.OutputConsole('Unknown error: \'' + cmd + '\' ')
+            self.OutputConsole('Program Error: \'' + cmd + '\' ')
             self.OutputConsole({error})
         
         self.cmdHistoryIndex = 1
@@ -98,6 +112,7 @@ class Application(Frame):
 
     # Output a console message
     def OutputConsole(self, message):
+        self.consoleOutput.insert(END, '[' + datetime.now().strftime("%H:%M:%S") + ']')
         self.consoleOutput.insert(END, message)
         self.consoleOutput.insert(END, '\n')
         self.consoleOutput.see(END)
@@ -126,13 +141,78 @@ class Application(Frame):
 
     # Alters the current scoreboard
     def Display(self, *args):
-       if str(args[0][0]).upper() == 'MODE':
+        if str(args[0][0]).upper() == 'MODE':
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
             result = wsObject.Scoreboard.SetImageDisplay(args[0][2])
             if not result:
                raise NameError('Invalid display mode -> {none, over, under, trans}')
             else:
                 self.OutputConsole('Changed display mode for ' + str(args[0][1]) + ' to ' + str(args[0][2]) + '.')
+            return
+
+        if str(args[0][0]).upper() == 'TURNOFF':
+            if str(args[0][1]) in self.runningPrograms:
+                self.runningPrograms[str(args[0][1])].Stop()
+                self.runningPrograms.pop(str(args[0][1]))
+                self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+
+            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
+            blankCanvas = ByteCanvas()
+            result = wsObject.Scoreboard.PrintImage(blankCanvas.Output())
+            resultDisplay = wsObject.Scoreboard.SetImageDisplay('over')
+            if not result:
+               raise NameError('Improper arguments called for \'display turnoff\' command')
+            if not resultDisplay:
+                raise NameError('Error setting display mode to \'over\'')
+            else:
+                self.OutputConsole('Turned off scoreboard display for ' + str(args[0][1]) + '.\nCall \'display turnon {ws}\' to return to normal screen.')
+            return
+        
+        if str(args[0][0]).upper() == 'TURNON':
+            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
+            resultDisplay = wsObject.Scoreboard.SetImageDisplay('none')
+            if not resultDisplay:
+               raise NameError('Error posting \'turnon\' to scoreboard.')
+            else:
+                self.OutputConsole('Turned on scoreboard display for ' + str(args[0][1]) + '.')
+            return
+
+        if str(args[0][0]).upper() == 'RUN':
+            if str(args[0][1]) in self.runningPrograms:
+                raise RuntimeError('Program is already running on that workstation.')
+
+            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
+            if str(args[0][2]).upper() == 'BOUNCE':
+                newProgram = Program(str(args[0][1]))
+                newThread = threading.Thread(target=newProgram.BounceProgram, args=(wsObject,))
+                newThread.start()
+                self.runningPrograms[str(args[0][1])] = newProgram
+                self.OutputConsole('Running Bounce program on ' + str(args[0][1]))
+                return
+            else: 
+                if str(args[0][2]).upper() == 'CONTROL':
+                    newProgram = Program(str(args[0][1]))
+                    newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
+                    newThread.start()
+                    self.runningPrograms[str(args[0][1])] = newProgram
+                    self.OutputConsole('Running Control program on ' + str(args[0][1]))
+                    return
+
+            raise NameError('Program name not found.')
+            return
+
+        if str(args[0][0]).upper() == 'STOP':
+            if str(args[0][1]) not in self.runningPrograms:
+                raise RuntimeError('No program running on that workstation.')
+            self.runningPrograms[str(args[0][1])].Stop()
+            self.runningPrograms.pop(str(args[0][1]))
+            self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+            return
+            
+        
+        raise NameError('Display subcommand not found: ' + str(args[0][0]))
+
+        
 
 
     # Opens a workstation in the browser
@@ -169,12 +249,11 @@ class Application(Frame):
     def Help(self, *args):
         helpBlock = """
 Commands:
+Help       - Lists all commands
 List       - Display all workstation data
 Msg        - Write a message to a WS
 Open       - Opens a WS in browser
-Update     - Update a WS
-Add        - Add a WS
-Delete     - Delete a WS
+Display    - Display/scoreboard specific commands
 Quit       - Quit Application"""
         self.OutputConsole(helpBlock)
         

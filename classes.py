@@ -42,7 +42,7 @@ class Scoreboard:
     
     # Set the scoreboard display setting
     def SetImageDisplay(self, status) -> bool:
-        if status not in ['none', 'under', 'trans', 'over']:
+        if status not in ['none', 'trans', 'over', 'under']:
             return False
         else:
             response = self.ws.POST('api/v0/scoreboard/graphic/mode', json.dumps({'value' : status}))

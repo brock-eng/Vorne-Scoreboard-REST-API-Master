@@ -144,31 +144,11 @@ def ControlProgram():
         if keyboard.is_pressed('enter'):
             deleteMode = not deleteMode
 
-def main():
+def main() -> None:
     BounceProgram()
     # ControlProgram()
     
     return
-
-    timeHours = 60 * 60 * 2
-    WS2 = WorkStation(testWorkstation['ip'], testWorkstation['name'])
-
-    i = 0
-    while True:
-        try: 
-            WS2.Scoreboard.Display("Python Connected", time = timeHours)
-        except:
-            print("Error connecting to display.")
-
-        time.sleep(20)
-        i += 1
-
-    
-    '''
-    response = requests.get('https://seats-api.seatsinc.com/ords/api1/color_legend/json?empid=9146&workOrderNumber=SP44092197&workCenterNo=4209&orderType=SO&pkey=PsUxHibfqpoZKUiHBGkcXQTkU')
-    print(response.text)
-    print(response)
-    '''
 
 
     
