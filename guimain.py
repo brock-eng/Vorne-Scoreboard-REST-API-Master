@@ -42,6 +42,7 @@ class Application(Frame):
         self.inputBar.pack(fill = X)
         self.consoleOutputLabel.pack(fill = X)
         self.consoleOutput.pack(fill = X)
+        self.consoleOutput.configure(state=DISABLED)
 
         self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
 
@@ -72,7 +73,7 @@ class Application(Frame):
         self.inputBar.insert(0, self.cmdHistory[-self.cmdHistoryIndex])
 
     # Runs a command as entered in the entry bar
-    def RunCommand(self, event):
+    def RunCommand(self, event, command = None):
         if (len(self.inputBar.get()) == 0):
             return
 
@@ -85,9 +86,11 @@ class Application(Frame):
             'WRITE'     : self.Message,
             'DISPLAY'   : self.Display,
             'DISP'      : self.Display,
+            'SETPART'   : self.SetPartNo,
             'STOP'      : self.Close,
             'QUIT'      : self.Close,
-            'CLOSE'     : self.Close
+            'CLOSE'     : self.Close,
+            'SERIAL'    : self.PrintSampleSerial
         }
 
         cmd = str(self.inputBar.get().split()[0]).upper()
@@ -112,10 +115,12 @@ class Application(Frame):
 
     # Output a console message
     def OutputConsole(self, message):
+        self.consoleOutput.configure(state='normal')
         self.consoleOutput.insert(END, '[' + datetime.now().strftime("%H:%M:%S") + ']')
         self.consoleOutput.insert(END, message)
         self.consoleOutput.insert(END, '\n')
         self.consoleOutput.see(END)
+        self.consoleOutput.configure(state='disabled')
 
     # Shows all currently entered workstations
     def List(self, *args):
@@ -143,7 +148,7 @@ class Application(Frame):
     def Display(self, *args):
         if str(args[0][0]).upper() == 'MODE':
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-            result = wsObject.Scoreboard.SetImageDisplay(args[0][2])
+            result = wsObject.Scoreboard.SetImageMode(args[0][2])
             if not result:
                raise NameError('Invalid display mode -> {none, over, under, trans}')
             else:
@@ -159,18 +164,19 @@ class Application(Frame):
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
             blankCanvas = ByteCanvas()
             result = wsObject.Scoreboard.PrintImage(blankCanvas.Output())
-            resultDisplay = wsObject.Scoreboard.SetImageDisplay('over')
+            resultDisplay = wsObject.Scoreboard.SetImageMode('over')
             if not result:
                raise NameError('Improper arguments called for \'display turnoff\' command')
             if not resultDisplay:
                 raise NameError('Error setting display mode to \'over\'')
             else:
-                self.OutputConsole('Turned off scoreboard display for ' + str(args[0][1]) + '.\nCall \'display turnon {ws}\' to return to normal screen.')
+                self.OutputConsole('Turned off scoreboard display for ' + str(args[0][1]))
+                self.OutputConsole('Call \'display turnon {ws}\' to return to normal screen.')
             return
         
         if str(args[0][0]).upper() == 'TURNON':
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-            resultDisplay = wsObject.Scoreboard.SetImageDisplay('none')
+            resultDisplay = wsObject.Scoreboard.SetImageMode('none')
             if not resultDisplay:
                raise NameError('Error posting \'turnon\' to scoreboard.')
             else:
@@ -179,9 +185,12 @@ class Application(Frame):
 
         if str(args[0][0]).upper() == 'RUN':
             if str(args[0][1]) in self.runningPrograms:
-                raise RuntimeError('Program is already running on that workstation.')
+                self.runningPrograms[str(args[0][1])].Stop()
+                self.runningPrograms.pop(str(args[0][1]))
+                self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
 
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
+
             if str(args[0][2]).upper() == 'BOUNCE':
                 newProgram = Program(str(args[0][1]))
                 newThread = threading.Thread(target=newProgram.BounceProgram, args=(wsObject,))
@@ -189,17 +198,24 @@ class Application(Frame):
                 self.runningPrograms[str(args[0][1])] = newProgram
                 self.OutputConsole('Running Bounce program on ' + str(args[0][1]))
                 return
-            else: 
-                if str(args[0][2]).upper() == 'CONTROL':
-                    newProgram = Program(str(args[0][1]))
-                    newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
-                    newThread.start()
-                    self.runningPrograms[str(args[0][1])] = newProgram
-                    self.OutputConsole('Running Control program on ' + str(args[0][1]))
-                    return
+            
+            if str(args[0][2]).upper() == 'CONTROL':
+                newProgram = Program(str(args[0][1]))
+                newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
+                newThread.start()
+                self.runningPrograms[str(args[0][1])] = newProgram
+                self.OutputConsole('Running Control program on ' + str(args[0][1]))
+                return
+                
+            if str(args[0][2]).upper() == 'BOUNCE2':
+                newProgram = Program(str(args[0][1]))
+                newThread = threading.Thread(target=newProgram.Bounce2Program, args=(wsObject, args[0][3]))
+                newThread.start()
+                self.runningPrograms[str(args[0][1])] = newProgram
+                self.OutputConsole('Running Bounce2 program on ' + str(args[0][1]))
+                return
 
             raise NameError('Program name not found.')
-            return
 
         if str(args[0][0]).upper() == 'STOP':
             if str(args[0][1]) not in self.runningPrograms:
@@ -212,7 +228,16 @@ class Application(Frame):
         
         raise NameError('Display subcommand not found: ' + str(args[0][0]))
 
+    # Sets a part run based on a serial number
+    def SetPartNo(self, *args):
+        # setpart ws serial
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        postResult = wsObject.SetPart(args[0][1], serialMode=True)
         
+        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(args[0][1]) + ".") \
+            if postResult else \
+                self.OutputConsole("Error posting part run to: " + str(args[0][0]))
+
 
 
     # Opens a workstation in the browser
@@ -256,7 +281,14 @@ Open       - Opens a WS in browser
 Display    - Display/scoreboard specific commands
 Quit       - Quit Application"""
         self.OutputConsole(helpBlock)
-        
+    
+    # Prints a sample serial to console
+    def PrintSampleSerial(self, *args):
+        serial = "I3993893"
+        self.root.clipboard_clear()
+        self.root.clipboard_append(serial)
+        self.OutputConsole("Copied sample serial to clipboard: " + serial)
+
     # Run the application
     def Run(self):
         self.root.mainloop()

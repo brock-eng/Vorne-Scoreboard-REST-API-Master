@@ -73,6 +73,81 @@ class Program:
             if keyboard.is_pressed('q'):
                 self.isRunning = False
 
+
+    def Bounce2Program(self, WS, numBalls = 10):
+        newCanvas = ByteCanvas()
+
+        newCanvas.Fill(0, 0, 80, 31, 'G4')
+        
+        class ball:
+            def __init__(self) -> None:
+                self.x = int(random.randint(0, newCanvas.WIDTH - 2))
+                self.y = int(random.randint(0, newCanvas.HEIGHT - 2))
+                self.vX = int(-1 + 2 * random.randint(0, 1))
+                self.vY = int(-1 + 2 * random.randint(0, 1))
+                self.color = int(random.randint(1,3)) * 4
+
+
+        numBalls = int(numBalls)
+        balls = list()
+        i = 0
+        while i < numBalls:
+            balls.append(ball())
+            i+=1
+        
+        while self.isRunning:
+            for b in balls:
+            # Clear the previous 'ball' position
+                newCanvas.ClearPixel(b.x, b.y)
+
+                b.x += b.vX
+                b.y += b.vY
+                
+                # Collides with x-wall
+                if bool(newCanvas.GetPixel(b.x, b.y - b.vY)):
+                    newCanvas.PaintPixel(b.x, b.y - b.vY, 'BLANK')
+                    b.x -= b.vX
+                    b.vX = -b.vX
+                    yNotTriggered = False
+                # Collides with y-wall
+                
+                if bool(newCanvas.GetPixel(b.x-b.vX, b.y)):
+                    newCanvas.PaintPixel(b.x-b.vX, b.y, 'BLANK')
+                    b.y -= b.vY
+                    b.vY = -b.vY
+                else: # Collides with corner-wall
+                    if bool(newCanvas.GetPixel(b.x, b.y) and yNotTriggered):
+                        newCanvas.PaintPixel(b.x, b.y, 'BLANK')
+                        b.x -= b.vX
+                        b.y -= b.vY
+                        b.vX = -b.vX
+                        b.vY = -b.vY
+
+                yNotTriggered = True  
+
+                # Collision with screen borders
+                if (b.x >= 79): 
+                    b.vX = -1
+                else:
+                    if b.x <= 0: 
+                        b.vX = 1
+
+                if (b.y >= 31): 
+                    b.vY = -1
+                else:
+                    if b.y <= 0: b.vY = 1
+
+                # Update the ball position
+                newCanvas.PaintPixel(b.x, b.y, b.color)
+
+            WS.Scoreboard.PrintImage(newCanvas.Output())
+            
+            time.sleep(0.04)
+
+            # Quit if q is pressed
+            if keyboard.is_pressed('q'):
+                self.isRunning = False
+
     def ControlProgram(self, WS):
         newCanvas = ByteCanvas()
 

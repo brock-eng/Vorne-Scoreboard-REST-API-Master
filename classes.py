@@ -41,7 +41,7 @@ class Scoreboard:
         return response
     
     # Set the scoreboard display setting
-    def SetImageDisplay(self, status) -> bool:
+    def SetImageMode(self, status) -> bool:
         if status not in ['none', 'trans', 'over', 'under']:
             return False
         else:
@@ -72,7 +72,7 @@ class Scoreboard:
     # Instead it displays a blank image overlay using direct screen control
     def TurnOff(self):
         imageMapBytes = bytes(7860)
-        self.SetImageDisplay(imageMapBytes)
+        self.SetImageMode(imageMapBytes)
 
 
 # Class that holds all API methods for interacting with a Workstations Vorne scoreboard
@@ -113,6 +113,28 @@ class WorkStation:
             return requests.post(requestIP, setValue)
         else:
             return requests.post(requestIP, setValue, headers = headersIn)
+    
+    # Set current part run
+    def SetPart(self, PartNo, serialMode = False) -> bool:
+        serialHeaders = {"pkey" : "RIB26OGS3R7VRcaRMbVM90mjza"}
+        vorneURL = "api/v0/part_run"
+        if serialMode:
+            response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + PartNo + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
+            PartNo = response.json()['catalog_no']
+            print(PartNo)
+
+        partRunBase = {
+            "part_id": PartNo,
+            "ideal_cycle_time": 1,
+            "takt_time": 1.2,
+            "start_with_changeover": True,
+            "changeover_reason": "part_change",
+        }
+        
+        response = self.POST(vorneURL, json.dumps(partRunBase))
+
+        return (response.status_code == 200)
+
 
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):
