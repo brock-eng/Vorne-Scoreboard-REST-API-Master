@@ -1,6 +1,6 @@
 from webbrowser import Error
 from tkinter import *
-
+import os
 import threading
 
 from classes import *
@@ -37,15 +37,25 @@ class Application(Frame):
         
     # Builds application gui
     def Build(self):
+        self.root.iconbitmap('res\img\seats.ico')
         self.consoleOutputLabel.place(x = 0)
         self.inputBar.focus_set()
         self.inputBar.pack(fill = X)
         self.consoleOutputLabel.pack(fill = X)
-        self.consoleOutput.pack(fill = X)
+        self.consoleOutput.pack(fill = BOTH)
         self.consoleOutput.configure(state=DISABLED)
 
+        try:
+            os.environ["BROWSER"] = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+        except:
+            self.OutputConsole("Error binding Chrome OR Firefox: Defaulting to IE")
+        
         self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
 
+    # App configuration settings
+    def Configure(self):
+
+        return
     # Window close handling
     def OnClose(self):
         for program in self.runningPrograms:
@@ -87,6 +97,8 @@ class Application(Frame):
             'DISPLAY'   : self.Display,
             'DISP'      : self.Display,
             'SETPART'   : self.SetPartNo,
+            'GETPART'   : self.GetPartRun,
+            'DOWNTIME'  : self.Downtime,
             'STOP'      : self.Close,
             'QUIT'      : self.Close,
             'CLOSE'     : self.Close,
@@ -230,15 +242,46 @@ class Application(Frame):
 
     # Sets a part run based on a serial number
     def SetPartNo(self, *args):
-        # setpart ws serial
+        # Set display to on if not already on
         wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        postResult = wsObject.SetPart(args[0][1], serialMode=True)
+        if wsObject.Scoreboard.GetImageMode() != "none":
+            self.Display(["TURNON", args[0][0]])
+
+        # set serial mode if serial tag is included in cmd
+        serial = True if "-serial" in args[0] else False    
+        changeOverMode = True if "-changeover" in args[0] else False
         
-        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(args[0][1]) + ".") \
-            if postResult else \
-                self.OutputConsole("Error posting part run to: " + str(args[0][0]))
+        if serial:
+            SerialNum = args[0][1]
+            response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + SerialNum + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
+            try: PartNo = response.json()['catalog_no']
+            except: raise Error("Could not find PartNo for given serial: {" + SerialNum + "}")
+        else:
+            PartNo = args[0][1]
 
+        # Check if current part run matches new part run
+        # If true then cancel the part run (it's already running the part)
+        currentPartNo = wsObject.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
+        print(currentPartNo)
 
+        if str(PartNo) == str(currentPartNo):
+            self.OutputConsole("Did not set new part run: {" + str(PartNo) + "} is already in production.")
+            return
+
+        # Call set part command
+        postResult = wsObject.SetPart(PartNo, changeOver=changeOverMode)
+        
+        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(PartNo) + ".") \
+
+    # Print information about the current part run in the console
+    def GetPartRun(self, *args):
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        returnData = wsObject.GET("api/v0/part_run", jsonToggle=True)
+
+        self.OutputConsole("ID       : " + str(returnData["data"]["part_id"]))
+        self.OutputConsole("Ideal (s): " + str(returnData["data"]["ideal_cycle_time"]))
+        self.OutputConsole("Takt  (s): " + str(returnData["data"]["takt_time"]))
+        self.OutputConsole("DT Thresh: " + str(returnData["data"]["down_threshold"]))
 
     # Opens a workstation in the browser
     def Open(self, *args):
@@ -267,9 +310,12 @@ class Application(Frame):
             self.OutputConsole('Printed to {' + str(args[0][0]) + '}: \"' + msg + '\"')
         except:
             raise Error("Error posting message to display")
-
-
     
+    # Disables active state detection and provides a downtime reason
+    def Downtime(self, *args):
+        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        wsObject.POST("api/v0/process_state/reason", json.dumps({"value" : str(args[0][1])}))
+
     # Outputs the help block
     def Help(self, *args):
         helpBlock = """
@@ -279,6 +325,8 @@ List       - Display all workstation data
 Msg        - Write a message to a WS
 Open       - Opens a WS in browser
 Display    - Display/scoreboard specific commands
+Setpart    - Change the current part run using a serial number
+Serial     - Copy a sample serial number to the clipboard
 Quit       - Quit Application"""
         self.OutputConsole(helpBlock)
     
@@ -300,7 +348,6 @@ Quit       - Quit Application"""
 
 def main():
     ConsoleApp = Application()
-
     ConsoleApp.Run()
 
 

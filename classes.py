@@ -1,3 +1,4 @@
+from shutil import Error
 import requests
 import webbrowser
 import json
@@ -51,6 +52,11 @@ class Scoreboard:
             else:
                 return False
 
+    # Return the current display mode of the scoreboard
+    def GetImageMode(self) -> str:
+        response = self.ws.GET('api/v0/scoreboard/graphic/mode', jsonToggle = True)
+        return response["data"]["value"]
+
     # Opens Scoreboard in the web browser
     def Open(self):
         webbrowser.open(self.ws.ip + '#!/view/scoreboard')
@@ -94,7 +100,7 @@ class WorkStation:
         requestIP = self.ip + query
         response = requests.get(requestIP)
         if (response.status_code != requests.codes.ok):
-            raise Exception('Error: bad http request made by ' + self.workstation + ".\nRequested from: " + requestIP + "\nError code: " + str(response.status_code))
+            raise Exception('Error: bad http request made from {' + requestIP + "}  Error code: " + str(response.status_code))
 
         if jsonToggle:
             if printToggle:
@@ -114,26 +120,29 @@ class WorkStation:
         else:
             return requests.post(requestIP, setValue, headers = headersIn)
     
-    # Set current part run
-    def SetPart(self, PartNo, serialMode = False) -> bool:
+    # Set current part run based on part number
+    def SetPart(self, PartNo, ideal = 20, takt = 30, \
+        downTime = 60, changeOver = True, changeOverTarget = 60) -> bool:
         serialHeaders = {"pkey" : "RIB26OGS3R7VRcaRMbVM90mjza"}
         vorneURL = "api/v0/part_run"
-        if serialMode:
-            response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + PartNo + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
-            PartNo = response.json()['catalog_no']
-            print(PartNo)
 
         partRunBase = {
             "part_id": PartNo,
-            "ideal_cycle_time": 1,
-            "takt_time": 1.2,
-            "start_with_changeover": True,
+            "ideal_cycle_time": ideal,
+            "takt_time": takt,
+            "down_threshold": downTime,
+            "start_with_changeover": changeOver,
             "changeover_reason": "part_change",
+            "changeover_target": changeOverTarget,
+            "disable_when" : {
+                "type" : "timer"
+            }
         }
         
         response = self.POST(vorneURL, json.dumps(partRunBase))
+        responseCheck = (response.status_code == 200)
 
-        return (response.status_code == 200)
+        return responseCheck, PartNo
 
 
     # Prints an overview of the current workstation, including state/reason/elapsed_time
