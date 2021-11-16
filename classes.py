@@ -86,9 +86,9 @@ class Scoreboard:
 class WorkStation:
     
     # Initialize with an ip address
-    def __init__(self, ipAddress, workstation = None) -> None:
+    def __init__(self, ipAddress, name = "") -> None:
         self.Scoreboard = Scoreboard(self)
-        self.name = workstation
+        self.name = name
         self.ip = 'http://' + ipAddress + '/'
 
     # Open the current scoreboard dashboard

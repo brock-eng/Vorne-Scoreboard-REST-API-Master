@@ -6,7 +6,6 @@ import threading
 from classes import *
 from ws_data import data
 from bytecanvas import *
-
 from programs import Program
 
 class Application(Frame):
@@ -103,6 +102,7 @@ class Application(Frame):
             'PSCAN'     : self.PScan,
             'POLL'      : self.StartPolling,
             'STOPPOLL'  : self.StopPolling,
+            'POLLSTOP'  : self.StopPolling,
             'SERIAL'    : self.PrintSampleSerial,
             'STOP'      : self.OnClose,
             'QUIT'      : self.OnClose,
@@ -208,6 +208,9 @@ class Application(Frame):
 
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
 
+            if wsObject.Scoreboard.GetImageMode() != "over":
+                self.Display(["TURNOFF", args[0][1]])
+
             if str(args[0][2]).upper() == 'BOUNCE':
                 newProgram = Program(str(args[0][1]))
                 newThread = threading.Thread(target=newProgram.BounceProgram, args=(wsObject,))
@@ -216,7 +219,7 @@ class Application(Frame):
                 self.OutputConsole('Running Bounce program on ' + str(args[0][1]))
                 return
             
-            if str(args[0][2]).upper() == 'CONTROL':
+            elif str(args[0][2]).upper() == 'CONTROL':
                 newProgram = Program(str(args[0][1]))
                 newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
                 newThread.start()
@@ -224,7 +227,7 @@ class Application(Frame):
                 self.OutputConsole('Running Control program on ' + str(args[0][1]))
                 return
                 
-            if str(args[0][2]).upper() == 'BOUNCE2':
+            elif str(args[0][2]).upper() == 'BOUNCE2':
                 newProgram = Program(str(args[0][1]))
                 newThread = threading.Thread(target=newProgram.Bounce2Program, args=(wsObject, args[0][3]))
                 newThread.start()
@@ -346,7 +349,7 @@ Quit       - Quit Application"""
     # Starts continuous polling of a workstation
     # Gets the unrecognized scan and triggers actions
     def StartPolling(self, *args):
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
         if wsObject.ip in self.runningApplications:
             self.OutputConsole('Polling already active at workstation: ' + str(args[0][0]))
         else:
@@ -360,12 +363,18 @@ Quit       - Quit Application"""
     # Stops the continuous polling of a workstation
     # if the ws is currently polling
     def StopPolling(self, *args):
+        if "-all" in args[0]:
+            self.runningApplications.clear()
+            self.OutputConsole('Stopped polling at all workstations.')
+            return
+        
         wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
         if wsObject.ip in self.runningApplications:
             self.runningApplications.remove(wsObject.ip)
             self.OutputConsole('Stopped polling at workstation: ' + str(args[0][0]))
         else:
             self.OutputConsole('Not currently polling at workstation: ' + str(args[0][0]))
+        return
 
     # Constantly polls the WS and processes its last unrecognized scan
     def PollingLoop(self, wsObject):
@@ -383,23 +392,23 @@ Quit       - Quit Application"""
 
     # Single poll command for a ws
     def PScan(self, *args):
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        self.HandleLastScan(wsObject)
+        wsname = str(args[0][0])
+        wsObject = WorkStation(data["workstations"][wsname]["ip"])
+        self.HandleLastScan(wsObject, pollMode = False)
         return
 
     # Handles the latest unrecognized scan
     def HandleLastScan(self, wsObject, pollMode = False):
         scannedText = wsObject.GetScan()
         scanNumber = wsObject.GetScanID()
+        wsname = wsObject.name
 
         # Continuous polling behavior handling
         if pollMode:
             # if returned scan is equal to previous, do nothing
             if scanNumber == self.runningApplicationsQueries[wsObject]:
-                print("Did nothing.")
                 return
             else:
-                print("New command!")
                 self.runningApplicationsQueries[wsObject] = scanNumber
 
         self.OutputConsole("Last unrecognized scan: {content}".format(content = scannedText), printMode = not pollMode)
@@ -408,7 +417,7 @@ Quit       - Quit Application"""
         if scannedText[0:4] == '%CUS': # detect if custom tag
             self.OutputConsole("Detected custom command: " + scannedText[4:])
             CustomCommand = scannedText[4:]
-            self.RunScannedCommand(str(CustomCommand).upper())
+            self.RunScannedCommand(str(CustomCommand).upper(), wsname)
 
         elif scannedText[0] == 'S': # SN
             
@@ -419,21 +428,21 @@ Quit       - Quit Application"""
         return
 
     # Runs a custom scanned command 
-    def RunScannedCommand(self, cmd):
+    def RunScannedCommand(self, cmd, wsName):
         cmd = str(cmd).rstrip()
 
         if cmd == "OPERATORS--":
-            self.Display(["run", "test1", "control"],)
+            self.Display(["run", wsName, "control"],)
         elif cmd == "OPERATORS++":
             self.SetPartNo(["test1", "Sample"])
         elif cmd == "TURNOFF":
-            self.Display(["turnoff", "test1"])
+            self.Display(["turnoff", wsName])
         elif cmd == "TURNON":
-            self.Display(["turnon", "test1"])
+            self.Display(["turnon", wsName])
         elif cmd == "OPENLINK1":
             webbrowser.get("wb").open("https://www.google.com/")
         elif cmd == "FUNTIMES":
-            self.Display(["run", "test1", "bounce2", 5],)
+            self.Display(["run", wsName, "bounce2", 5],)
         else:
             self.OutputConsole("Warning: Command not found.")
 
