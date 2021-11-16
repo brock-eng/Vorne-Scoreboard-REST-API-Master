@@ -145,9 +145,12 @@ def ControlProgram():
             deleteMode = not deleteMode
 
 def main() -> None:
-    BounceProgram()
+    # BounceProgram()
     # ControlProgram()
-    
+    test = "%CUSOperators--"
+    firstFour = test[0:4]
+    everythingElse = test[4:]
+    print(firstFour + " " + everythingElse)
     return
 
 

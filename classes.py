@@ -144,6 +144,18 @@ class WorkStation:
 
         return responseCheck, PartNo
 
+    # Returns information on the last unrecognized barcode
+    # Note that any barcode that is not printed using Vorne's system
+    # is considered unrecognized
+    def GetScan(self):
+        metadata = self.GET("api/v0/device", jsonToggle=True)
+        return metadata["data"]["serial_unrecognized_raw"]["value"]
+
+    # Returns the current scan id.
+    # Used for determining if a new scan has taken place
+    def GetScanID(self):
+        metadata = self.GET("api/v0/device", jsonToggle = True)
+        return metadata["data"]["serial_unrecognized_count"]["value"]
 
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):

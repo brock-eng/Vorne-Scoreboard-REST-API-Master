@@ -31,10 +31,16 @@ class Application(Frame):
         self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
 
         # Misc class variables
+        self.lastScannedCmd = ""
         self.cmdHistory = list()
         self.cmdHistoryIndex = 0
         self.runningPrograms = dict()
+        self.runningApplications = list()
+        self.runningApplicationsQueries = dict()
+        self.pollingDuration = 1
         
+        self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
+
     # Builds application gui
     def Build(self):
         self.root.iconbitmap('res\img\seats.ico')
@@ -45,23 +51,18 @@ class Application(Frame):
         self.consoleOutput.pack(fill = BOTH)
         self.consoleOutput.configure(state=DISABLED)
 
-        try:
-            os.environ["BROWSER"] = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-        except:
-            self.OutputConsole("Error binding Chrome OR Firefox: Defaulting to IE")
+        # os.environ["BROWSER"] = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+
+        browser_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+        #browser_path = "C:/Program Files/Internet Explorer/iexplore.exe"
+
+        webbrowser.register("wb", None, webbrowser.BackgroundBrowser(browser_path))
         
-        self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
 
     # App configuration settings
     def Configure(self):
 
         return
-    # Window close handling
-    def OnClose(self):
-        for program in self.runningPrograms:
-            self.runningPrograms[program].Stop()
-        
-        self.root.destroy()
 
     # up-arrow for selecting a recent cmd
     def GetRecentCommandUp(self, event):
@@ -99,10 +100,13 @@ class Application(Frame):
             'SETPART'   : self.SetPartNo,
             'GETPART'   : self.GetPartRun,
             'DOWNTIME'  : self.Downtime,
-            'STOP'      : self.Close,
-            'QUIT'      : self.Close,
-            'CLOSE'     : self.Close,
-            'SERIAL'    : self.PrintSampleSerial
+            'PSCAN'     : self.PScan,
+            'POLL'      : self.StartPolling,
+            'STOPPOLL'  : self.StopPolling,
+            'SERIAL'    : self.PrintSampleSerial,
+            'STOP'      : self.OnClose,
+            'QUIT'      : self.OnClose,
+            'CLOSE'     : self.OnClose
         }
 
         cmd = str(self.inputBar.get().split()[0]).upper()
@@ -126,7 +130,8 @@ class Application(Frame):
         self.inputBar.delete(first = 0, last = len(self.inputBar.get()))
 
     # Output a console message
-    def OutputConsole(self, message):
+    def OutputConsole(self, message, printMode = True):
+        if not printMode: return
         self.consoleOutput.configure(state='normal')
         self.consoleOutput.insert(END, '[' + datetime.now().strftime("%H:%M:%S") + ']')
         self.consoleOutput.insert(END, message)
@@ -253,9 +258,7 @@ class Application(Frame):
         
         if serial:
             SerialNum = args[0][1]
-            response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + SerialNum + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
-            try: PartNo = response.json()['catalog_no']
-            except: raise Error("Could not find PartNo for given serial: {" + SerialNum + "}")
+            PartNo = self.ConvertSerial(SerialNum)
         else:
             PartNo = args[0][1]
 
@@ -271,7 +274,8 @@ class Application(Frame):
         # Call set part command
         postResult = wsObject.SetPart(PartNo, changeOver=changeOverMode)
         
-        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(PartNo) + ".") \
+        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(PartNo) + ".")
+        return
 
     # Print information about the current part run in the console
     def GetPartRun(self, *args):
@@ -282,6 +286,7 @@ class Application(Frame):
         self.OutputConsole("Ideal (s): " + str(returnData["data"]["ideal_cycle_time"]))
         self.OutputConsole("Takt  (s): " + str(returnData["data"]["takt_time"]))
         self.OutputConsole("DT Thresh: " + str(returnData["data"]["down_threshold"]))
+        return
 
     # Opens a workstation in the browser
     def Open(self, *args):
@@ -289,11 +294,13 @@ class Application(Frame):
             raise NameError("OPEN cmd requires a workstation name")
         
         try:
-            webbrowser.open(data["workstations"][args[0][0]]["ip"])
+            webbrowser.get("wb").open(data["workstations"][args[0][0]]["ip"])
             self.OutputConsole("Opened workstation {name} in browser.".format(name = args[0]))
         except:
             raise NameError("Could not find path.")
+        return
 
+    # Send a one line string message to a display
     def Message(self, *args):
         if (len(args[0]) == 0):
             raise NameError("MESSAGE cmd requires a workstation name")
@@ -310,10 +317,13 @@ class Application(Frame):
             self.OutputConsole('Printed to {' + str(args[0][0]) + '}: \"' + msg + '\"')
         except:
             raise Error("Error posting message to display")
+        return
     
     # Disables active state detection and provides a downtime reason
     def Downtime(self, *args):
-        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        self.OutputConsole("Downtime command causes errors - deprecated indefinitely.")
+        return
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
         wsObject.POST("api/v0/process_state/reason", json.dumps({"value" : str(args[0][1])}))
 
     # Outputs the help block
@@ -325,11 +335,134 @@ List       - Display all workstation data
 Msg        - Write a message to a WS
 Open       - Opens a WS in browser
 Display    - Display/scoreboard specific commands
-Setpart    - Change the current part run using a serial number
+Setpart    - Change the current part run to a new part
+Getpart    - Get info on the current part run
 Serial     - Copy a sample serial number to the clipboard
+Setstate   - Set the machine state
 Quit       - Quit Application"""
         self.OutputConsole(helpBlock)
-    
+        return
+
+    # Starts continuous polling of a workstation
+    # Gets the unrecognized scan and triggers actions
+    def StartPolling(self, *args):
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        if wsObject.ip in self.runningApplications:
+            self.OutputConsole('Polling already active at workstation: ' + str(args[0][0]))
+        else:
+            newThread = threading.Thread(target=self.PollingLoop, args=(wsObject,))
+            newThread.start()
+            self.runningApplications.append(wsObject.ip)
+            self.OutputConsole('Started polling at ' + wsObject.ip)
+
+        return
+
+    # Stops the continuous polling of a workstation
+    # if the ws is currently polling
+    def StopPolling(self, *args):
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        if wsObject.ip in self.runningApplications:
+            self.runningApplications.remove(wsObject.ip)
+            self.OutputConsole('Stopped polling at workstation: ' + str(args[0][0]))
+        else:
+            self.OutputConsole('Not currently polling at workstation: ' + str(args[0][0]))
+
+    # Constantly polls the WS and processes its last unrecognized scan
+    def PollingLoop(self, wsObject):
+        # Get latest unrecognized scan and store it in dict
+        self.runningApplicationsQueries[wsObject] = wsObject.GetScanID()
+
+        # Main poll loop
+        while wsObject.ip in self.runningApplications:
+            print("Polling at ", wsObject.ip)
+            self.HandleLastScan(wsObject, pollMode = True)
+            time.sleep(self.pollingDuration)
+
+        print("Done polling at", wsObject.ip)
+        return
+
+    # Single poll command for a ws
+    def PScan(self, *args):
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        self.HandleLastScan(wsObject)
+        return
+
+    # Handles the latest unrecognized scan
+    def HandleLastScan(self, wsObject, pollMode = False):
+        scannedText = wsObject.GetScan()
+        scanNumber = wsObject.GetScanID()
+
+        # Continuous polling behavior handling
+        if pollMode:
+            # if returned scan is equal to previous, do nothing
+            if scanNumber == self.runningApplicationsQueries[wsObject]:
+                print("Did nothing.")
+                return
+            else:
+                print("New command!")
+                self.runningApplicationsQueries[wsObject] = scanNumber
+
+        self.OutputConsole("Last unrecognized scan: {content}".format(content = scannedText), printMode = not pollMode)
+        
+        # Begin scannedText handling
+        if scannedText[0:4] == '%CUS': # detect if custom tag
+            self.OutputConsole("Detected custom command: " + scannedText[4:])
+            CustomCommand = scannedText[4:]
+            self.RunScannedCommand(str(CustomCommand).upper())
+
+        elif scannedText[0] == 'S': # SN
+            
+            self.OutputConsole("Detected SN.")
+            self.ConvertSerialPartRun(wsObject, scannedText)
+        else:
+            self.OutputConsole("Unrecognized barcode: " + scannedText)
+        return
+
+    # Runs a custom scanned command 
+    def RunScannedCommand(self, cmd):
+        cmd = str(cmd).rstrip()
+
+        if cmd == "OPERATORS--":
+            self.Display(["run", "test1", "control"],)
+        elif cmd == "OPERATORS++":
+            self.SetPartNo(["test1", "Sample"])
+        elif cmd == "TURNOFF":
+            self.Display(["turnoff", "test1"])
+        elif cmd == "TURNON":
+            self.Display(["turnon", "test1"])
+        elif cmd == "OPENLINK1":
+            webbrowser.get("wb").open("https://www.google.com/")
+        elif cmd == "FUNTIMES":
+            self.Display(["run", "test1", "bounce2", 5],)
+        else:
+            self.OutputConsole("Warning: Command not found.")
+
+    # Reads the last unrecognized scan
+    # Converts to catalog number and starts a new part run
+    def ConvertSerialPartRun(self, ws, serialNum):
+        serialNumParsed = str(serialNum[1:]).rstrip()   # remove 'S' and '\r' from SN
+        
+        # Convert serial to catalog
+        partNo = self.ConvertSerial(serialNumParsed)
+
+        # Check if current part run matches new part run
+        # If true then cancel the part run (it's already running the part)
+        currentPartNo = ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
+
+        if str(partNo) == str(currentPartNo):
+            self.OutputConsole("Did not set new part run: {" + str(partNo) + "} is already in production.")
+            return
+
+        # Submit new part run based on catalog num
+        result = ws.SetPart(partNo)
+
+        if result:
+            self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
+        else:
+            self.OutputConsole("Failed to convert serial to new part run.")
+        return
+
+
     # Prints a sample serial to console
     def PrintSampleSerial(self, *args):
         serial = "I3993893"
@@ -337,15 +470,29 @@ Quit       - Quit Application"""
         self.root.clipboard_append(serial)
         self.OutputConsole("Copied sample serial to clipboard: " + serial)
 
+    # Grab a catalog number using the seats-api endpoint
+    def ConvertSerial(self, serial):
+        response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + serial + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
+        try: partNo = response.json()['catalog_no']
+        except: raise Error("Could not find PartNo for given serial: {" + serial + "}")
+        return partNo
+
     # Run the application
     def Run(self):
         self.root.mainloop()
 
-    # Closes the application
-    def Close(self, *args):
-        self.root.destroy()
-        
+    # Window close handling
+    def OnClose(self, *args):
+        for program in self.runningPrograms:
+            self.runningPrograms[program].Stop()
 
+        for app in self.runningApplications:
+            self.runningApplications.remove(app)
+        
+        time.sleep(self.pollingDuration * 1.25)
+        self.root.destroy()
+
+        
 def main():
     ConsoleApp = Application()
     ConsoleApp.Run()
