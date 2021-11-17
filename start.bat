@@ -1,6 +1,5 @@
 @echo off
 
-tasklist /fi "Image"
 N:
-cd "N:\ZBrock\Vorne\REST API\"
+cd "N:\ZBrock\Vorne\VorneServer\Repo\guimain.pyw"
 start pythonw guimain.pyw

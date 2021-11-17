@@ -2,9 +2,9 @@
 # This branch has reduced features and is mostly used
 # for polling a scoreboard and activating barcode commands
 
-from webbrowser import Error
 from tkinter import *
 import threading
+import webbrowser
 import yaml
 
 from classes import *
@@ -147,7 +147,7 @@ class Application(Frame):
 
             if self.ws.Scoreboard.GetImageMode() != "over":
                 self.Display(["TURNOFF"])
-
+            
             if str(args[0][2]).upper() == 'BOUNCE':
                 newProgram = Program(self.ws.name)
                 newThread = threading.Thread(target=newProgram.BounceProgram, args=(self.ws,))
