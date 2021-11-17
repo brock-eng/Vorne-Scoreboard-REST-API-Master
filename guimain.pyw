@@ -1,7 +1,7 @@
 from webbrowser import Error
 from tkinter import *
-import os
 import threading
+import ctypes
 
 from classes import *
 from ws_data import data
@@ -9,8 +9,30 @@ from bytecanvas import *
 from programs import Program
 
 class Application(Frame):
-    
+    # Application startup
     def __init__(self) -> None:
+        # Create and format widgets
+        self.Build()
+
+        # Configure App, set Keybinds, class variables, etc.
+        self.Configure()
+        
+        # Command History Support
+        self.lastScannedCmd = ""
+        self.cmdHistory = list()
+        self.cmdHistoryIndex = 0
+
+        # Tracked Running Programs
+        self.runningPrograms = dict()
+        self.runningApplications = list()
+        self.runningApplicationsQueries = dict()
+        self.pollingDuration = 1
+
+        # Startup Message
+        self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
+
+    # Builds and formats tkinter widgets
+    def Build(self):
         # Create root
         self.root = Tk()
         self.root.title('Vorne Scoreboard Console Tool')
@@ -19,29 +41,8 @@ class Application(Frame):
         self.inputBar = Entry()
         self.consoleOutputLabel = Label(text = 'Console Output')
         self.consoleOutput = Text()
-        
+
         # Formatting Widgets
-        self.Build()
-
-        # Keybinds / Handlers
-        self.root.bind('<Return>', self.RunCommand)
-        self.root.bind('<Up>', self.GetRecentCommandUp)
-        self.root.bind('<Down>', self.GetRecentCommandDown)
-        self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
-
-        # Misc class variables
-        self.lastScannedCmd = ""
-        self.cmdHistory = list()
-        self.cmdHistoryIndex = 0
-        self.runningPrograms = dict()
-        self.runningApplications = list()
-        self.runningApplicationsQueries = dict()
-        self.pollingDuration = 1
-        
-        self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
-
-    # Builds application gui
-    def Build(self):
         self.root.iconbitmap('res\img\seats.ico')
         self.consoleOutputLabel.place(x = 0)
         self.inputBar.focus_set()
@@ -49,21 +50,28 @@ class Application(Frame):
         self.consoleOutputLabel.pack(fill = X)
         self.consoleOutput.pack(fill = BOTH)
         self.consoleOutput.configure(state=DISABLED)
-
-        # os.environ["BROWSER"] = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-
-        browser_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
-        #browser_path = "C:/Program Files/Internet Explorer/iexplore.exe"
-
-        webbrowser.register("wb", None, webbrowser.BackgroundBrowser(browser_path))
+        return
         
 
     # App configuration settings
     def Configure(self):
+        # Set application as explicit
+        myappid = 'seatsinc.vorne_connection_tool' # arbitrary string
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        
+        # Set webbrowser path (set to use chrome)
+        browser_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+        #browser_path = "C:/Program Files/Internet Explorer/iexplore.exe"
+        webbrowser.register("wb", None, webbrowser.BackgroundBrowser(browser_path))
 
+        # Keybinds / Handlers
+        self.root.bind('<Return>', self.RunCommand)
+        self.root.bind('<Up>', self.GetRecentCommandUp)
+        self.root.bind('<Down>', self.GetRecentCommandDown)
+        self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
         return
 
-    # up-arrow for selecting a recent cmd
+    # Support for using up-arrow for selecting a recent cmd
     def GetRecentCommandUp(self, event):
         if len(self.cmdHistory) < self.cmdHistoryIndex:
             return
@@ -161,7 +169,7 @@ class Application(Frame):
             outputMessage = ws + ": IP/" + data["workstations"][ws]["ip"] + " - " + "Dept/" + data["workstations"][ws]["dept"] + response
             self.OutputConsole(outputMessage)
 
-    # Alters the current scoreboard
+    # Alters the current scoreboard display
     def Display(self, *args):
         if str(args[0][0]).upper() == 'MODE':
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
@@ -393,7 +401,7 @@ Quit       - Quit Application"""
     # Single poll command for a ws
     def PScan(self, *args):
         wsname = str(args[0][0])
-        wsObject = WorkStation(data["workstations"][wsname]["ip"])
+        wsObject = WorkStation(data["workstations"][wsname]["ip"], name = wsname)
         self.HandleLastScan(wsObject, pollMode = False)
         return
 

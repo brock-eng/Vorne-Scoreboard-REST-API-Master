@@ -1,9 +1,8 @@
-from classes import *
-from ws_data import data
 import time
-import requests
 import keyboard
 
+from classes import *
+from ws_data import data
 from bytecanvas import ByteCanvas
 
 def GetTest(WS):
