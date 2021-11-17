@@ -348,8 +348,11 @@ Open       - Opens a WS in browser
 Display    - Display/scoreboard specific commands
 Setpart    - Change the current part run to a new part
 Getpart    - Get info on the current part run
-Serial     - Copy a sample serial number to the clipboard
+Pscan      - Force a single read/command from a scoreboard
+Poll       - Start polling a scoreboard
+Stoppoll   - Stop polling a scoreboard
 Setstate   - Set the machine state
+Serial     - Copy a sample serial number to the clipboard
 Quit       - Quit Application"""
         self.OutputConsole(helpBlock)
         return

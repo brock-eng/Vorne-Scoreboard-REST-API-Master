@@ -1,5 +1,0 @@
----
-
-workstation: "7100"
-ip_address: 10.19.15.24
-pollOnStart: True
