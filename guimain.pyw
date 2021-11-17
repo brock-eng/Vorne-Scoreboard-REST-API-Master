@@ -27,7 +27,7 @@ class Application(Frame):
         self.runningApplications = list()
         self.runningApplicationsQueries = dict()
         self.pollingDuration = 1
-
+        print("ENDUSER BRANCH")
         # Startup Message
         self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
 
