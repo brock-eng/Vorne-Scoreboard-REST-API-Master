@@ -1,7 +1,11 @@
+# End user branch for the vorne scoreboard tool.
+# This branch has reduced features and is mostly used
+# for polling a scoreboard and activating barcode commands
+
 from webbrowser import Error
 from tkinter import *
 import threading
-import ctypes
+import yaml
 
 from classes import *
 from ws_data import data
@@ -16,37 +20,35 @@ class Application(Frame):
 
         # Configure App, set Keybinds, class variables, etc.
         self.Configure()
-        
-        # Command History Support
-        self.lastScannedCmd = ""
-        self.cmdHistory = list()
-        self.cmdHistoryIndex = 0
 
         # Tracked Running Programs
         self.runningPrograms = dict()
         self.runningApplications = list()
         self.runningApplicationsQueries = dict()
         self.pollingDuration = 1
-        print("ENDUSER BRANCH")
+
+        # App title
+        self.root.title('Seats-Vorne Control Server'.format(version=self.version))
+
+        # Start main control program
+        self.StartPolling([self.ws])
+
         # Startup Message
-        self.OutputConsole('Press ENTER to submit command. \'Help\' for command list.')
+        self.OutputConsole('Running for workstation: {name} at ip {ip}'.format(name=self.ws.name, ip=self.ws.ip))
+        self.OutputConsole('Software Version: {version}'.format(version = self.version))
 
     # Builds and formats tkinter widgets
     def Build(self):
         # Create root
         self.root = Tk()
-        self.root.title('Vorne Scoreboard Console Tool')
         
         # Creating Widgets
-        self.inputBar = Entry()
         self.consoleOutputLabel = Label(text = 'Console Output')
         self.consoleOutput = Text()
-
+        
         # Formatting Widgets
         self.root.iconbitmap('res\img\seats.ico')
         self.consoleOutputLabel.place(x = 0)
-        self.inputBar.focus_set()
-        self.inputBar.pack(fill = X)
         self.consoleOutputLabel.pack(fill = X)
         self.consoleOutput.pack(fill = BOTH)
         self.consoleOutput.configure(state=DISABLED)
@@ -55,87 +57,20 @@ class Application(Frame):
 
     # App configuration settings
     def Configure(self):
-        # Set application as explicit
-        myappid = 'seatsinc.vorne_connection_tool' # arbitrary string
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        
+        # Opening config file and getting settings
+        stream = open("config.yml", 'r')
+        config = yaml.safe_load(stream)
+        self.ws = WorkStation(ipAddress = config["ipAddress"], name = config["workstation"])
+        self.version = config["version"]
+
         # Set webbrowser path (set to use chrome)
-        browser_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
-        #browser_path = "C:/Program Files/Internet Explorer/iexplore.exe"
-        webbrowser.register("wb", None, webbrowser.BackgroundBrowser(browser_path))
+        browserPath = config["browserPath"]
+        webbrowser.register("wb", None, webbrowser.BackgroundBrowser(browserPath))
 
         # Keybinds / Handlers
-        self.root.bind('<Return>', self.RunCommand)
-        self.root.bind('<Up>', self.GetRecentCommandUp)
-        self.root.bind('<Down>', self.GetRecentCommandDown)
         self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
         return
 
-    # Support for using up-arrow for selecting a recent cmd
-    def GetRecentCommandUp(self, event):
-        if len(self.cmdHistory) < self.cmdHistoryIndex:
-            return
-
-        self.inputBar.delete(first = 0, last = len(self.inputBar.get()))
-        self.cmdHistoryIndex += 1
-        self.inputBar.insert(0, self.cmdHistory[-(self.cmdHistoryIndex - 1)])
-
-    # down-arrow for selecting a recent cmd
-    def GetRecentCommandDown(self, event):
-        if self.cmdHistoryIndex <= 1:
-            self.inputBar.delete(first = 0, last = len(self.inputBar.get()))
-            return
-
-        self.inputBar.delete(first = 0, last = len(self.inputBar.get()))
-        self.cmdHistoryIndex -= 1
-        self.inputBar.insert(0, self.cmdHistory[-self.cmdHistoryIndex])
-
-    # Runs a command as entered in the entry bar
-    def RunCommand(self, event, command = None):
-        if (len(self.inputBar.get()) == 0):
-            return
-
-        commands = {
-            'HELP'      : self.Help,
-            'LIST'      : self.List,
-            'OPEN'      : self.Open,
-            'MESSAGE'   : self.Message,
-            'MSG'       : self.Message,
-            'WRITE'     : self.Message,
-            'DISPLAY'   : self.Display,
-            'DISP'      : self.Display,
-            'SETPART'   : self.SetPartNo,
-            'GETPART'   : self.GetPartRun,
-            'DOWNTIME'  : self.Downtime,
-            'PSCAN'     : self.PScan,
-            'POLL'      : self.StartPolling,
-            'STOPPOLL'  : self.StopPolling,
-            'POLLSTOP'  : self.StopPolling,
-            'SERIAL'    : self.PrintSampleSerial,
-            'STOP'      : self.OnClose,
-            'QUIT'      : self.OnClose,
-            'CLOSE'     : self.OnClose
-        }
-
-        cmd = str(self.inputBar.get().split()[0]).upper()
-        arguments = self.inputBar.get().split()[1:]
-
-        self.cmdHistory.append(self.inputBar.get())
-        
-        try:
-            commands[cmd](arguments)
-        except KeyError as error:
-            self.OutputConsole('Command argument/sub-argument not found.')
-            self.OutputConsole({error})
-        except IndexError as error:
-            self.OutputConsole('Improper command arguments.  Type {help cmd} for cmd usage.')
-            self.OutputConsole({error})
-        except BaseException as error:
-            self.OutputConsole('Program Error: \'' + cmd + '\' ')
-            self.OutputConsole({error})
-        
-        self.cmdHistoryIndex = 1
-        self.inputBar.delete(first = 0, last = len(self.inputBar.get()))
 
     # Output a console message
     def OutputConsole(self, message, printMode = True):
@@ -157,9 +92,8 @@ class Application(Frame):
 
         for ws in data["workstations"]:
             if (statusFlag):
-                wsObject = WorkStation(data["workstations"][ws]["ip"])
                 try:
-                    response = wsObject.GET("api/v0/process_state/active", printToggle=False, jsonToggle=False)
+                    response = ws.self.GET("api/v0/process_state/active", printToggle=False, jsonToggle=False)
                     response = ' HTTP_STATUS/' + str(response.status_code)
                 except:
                     response = ' HTTP_STATUS/NOT_FOUND'
@@ -172,85 +106,80 @@ class Application(Frame):
     # Alters the current scoreboard display
     def Display(self, *args):
         if str(args[0][0]).upper() == 'MODE':
-            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-            result = wsObject.Scoreboard.SetImageMode(args[0][2])
+            result = self.ws.Scoreboard.SetImageMode(args[0][1])
             if not result:
                raise NameError('Invalid display mode -> {none, over, under, trans}')
             else:
-                self.OutputConsole('Changed display mode for ' + str(args[0][1]) + ' to ' + str(args[0][2]) + '.')
+                self.OutputConsole('Changed display mode for ' + self.ws.name + ' to ' + str(args[0][2]) + '.')
             return
 
         if str(args[0][0]).upper() == 'TURNOFF':
-            if str(args[0][1]) in self.runningPrograms:
-                self.runningPrograms[str(args[0][1])].Stop()
-                self.runningPrograms.pop(str(args[0][1]))
-                self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+            if str(self.ws.name) in self.runningPrograms:
+                self.runningPrograms[self.ws.name].Stop()
+                self.runningPrograms.pop(self.ws.name)
+                self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
 
-            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
             blankCanvas = ByteCanvas()
-            result = wsObject.Scoreboard.PrintImage(blankCanvas.Output())
-            resultDisplay = wsObject.Scoreboard.SetImageMode('over')
+            result = self.ws.Scoreboard.PrintImage(blankCanvas.Output())
+            resultDisplay = self.ws.Scoreboard.SetImageMode('over')
             if not result:
                raise NameError('Improper arguments called for \'display turnoff\' command')
             if not resultDisplay:
                 raise NameError('Error setting display mode to \'over\'')
             else:
-                self.OutputConsole('Turned off scoreboard display for ' + str(args[0][1]))
+                self.OutputConsole('Turned off scoreboard display for ' + self.ws.name)
                 self.OutputConsole('Call \'display turnon {ws}\' to return to normal screen.')
             return
         
         if str(args[0][0]).upper() == 'TURNON':
-            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-            resultDisplay = wsObject.Scoreboard.SetImageMode('none')
+            resultDisplay = self.ws.Scoreboard.SetImageMode('none')
             if not resultDisplay:
                raise NameError('Error posting \'turnon\' to scoreboard.')
             else:
-                self.OutputConsole('Turned on scoreboard display for ' + str(args[0][1]) + '.')
+                self.OutputConsole('Turned on scoreboard display for ' + self.ws.name + '.')
             return
 
         if str(args[0][0]).upper() == 'RUN':
-            if str(args[0][1]) in self.runningPrograms:
-                self.runningPrograms[str(args[0][1])].Stop()
-                self.runningPrograms.pop(str(args[0][1]))
-                self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+            if self.ws.name in self.runningPrograms:
+                self.runningPrograms[self.ws.name].Stop()
+                self.runningPrograms.pop(self.ws.name)
+                self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
 
-            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-
-            if wsObject.Scoreboard.GetImageMode() != "over":
-                self.Display(["TURNOFF", args[0][1]])
+            if self.ws.Scoreboard.GetImageMode() != "over":
+                self.Display(["TURNOFF"])
 
             if str(args[0][2]).upper() == 'BOUNCE':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.BounceProgram, args=(wsObject,))
+                newProgram = Program(self.ws.name)
+                newThread = threading.Thread(target=newProgram.BounceProgram, args=(self.ws,))
                 newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Bounce program on ' + str(args[0][1]))
+                self.runningPrograms[self.ws.name] = newProgram
+                self.OutputConsole('Running Bounce program on ' + self.ws.name)
                 return
             
             elif str(args[0][2]).upper() == 'CONTROL':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
+                newProgram = Program(self.ws.name)
+                newThread = threading.Thread(target=newProgram.ControlProgram, args=(self.ws,))
                 newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Control program on ' + str(args[0][1]))
+                self.runningPrograms[self.ws.name] = newProgram
+                self.OutputConsole('Running Control program on ' + self.ws.name)
                 return
                 
             elif str(args[0][2]).upper() == 'BOUNCE2':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.Bounce2Program, args=(wsObject, args[0][3]))
+                newProgram = Program(self.ws.name)
+                newThread = threading.Thread(target=newProgram.Bounce2Program, args=(self.ws, args[0][3]))
                 newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Bounce2 program on ' + str(args[0][1]))
+                self.runningPrograms[self.ws.name] = newProgram
+                self.OutputConsole('Running Bounce2 program on ' + self.ws.name)
                 return
 
             raise NameError('Program name not found.')
 
         if str(args[0][0]).upper() == 'STOP':
-            if str(args[0][1]) not in self.runningPrograms:
+            if self.ws.name not in self.runningPrograms:
                 raise RuntimeError('No program running on that workstation.')
-            self.runningPrograms[str(args[0][1])].Stop()
-            self.runningPrograms.pop(str(args[0][1]))
-            self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+            self.runningPrograms[self.ws.name].Stop()
+            self.runningPrograms.pop(self.ws.name)
+            self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
             return
             
         
@@ -259,23 +188,22 @@ class Application(Frame):
     # Sets a part run based on a serial number
     def SetPartNo(self, *args):
         # Set display to on if not already on
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        if wsObject.Scoreboard.GetImageMode() != "none":
-            self.Display(["TURNON", args[0][0]])
+        if self.ws.Scoreboard.GetImageMode() != "none":
+            self.Display(["TURNON"])
 
         # set serial mode if serial tag is included in cmd
         serial = True if "-serial" in args[0] else False    
         changeOverMode = True if "-changeover" in args[0] else False
         
         if serial:
-            SerialNum = args[0][1]
+            SerialNum = args[0][0]
             PartNo = self.ConvertSerial(SerialNum)
         else:
-            PartNo = args[0][1]
+            PartNo = args[0][0]
 
         # Check if current part run matches new part run
         # If true then cancel the part run (it's already running the part)
-        currentPartNo = wsObject.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
+        currentPartNo = self.ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
         print(currentPartNo)
 
         if str(PartNo) == str(currentPartNo):
@@ -283,15 +211,15 @@ class Application(Frame):
             return
 
         # Call set part command
-        postResult = wsObject.SetPart(PartNo, changeOver=changeOverMode)
+        postResult = self.ws.SetPart(PartNo, changeOver=changeOverMode)
         
-        self.OutputConsole("Set {" + str(args[0][0]) + "} part run to " + str(PartNo) + ".")
+        self.OutputConsole("Set {" + self.ws.name + "} part run to " + str(PartNo) + ".")
         return
 
     # Print information about the current part run in the console
     def GetPartRun(self, *args):
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        returnData = wsObject.GET("api/v0/part_run", jsonToggle=True)
+        self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
+        returnData = self.ws.GET("api/v0/part_run", jsonToggle=True)
 
         self.OutputConsole("ID       : " + str(returnData["data"]["part_id"]))
         self.OutputConsole("Ideal (s): " + str(returnData["data"]["ideal_cycle_time"]))
@@ -316,7 +244,7 @@ class Application(Frame):
         if (len(args[0]) == 0):
             raise NameError("MESSAGE cmd requires a workstation name")
         try:
-            wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+            self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
     
         except:
             raise NameError("Workstation not found.")
@@ -324,7 +252,7 @@ class Application(Frame):
         msg = ' '.join(args[0][1:])
         
         try:
-            wsObject.Scoreboard.Display(msg)
+            self.ws.Scoreboard.Display(msg)
             self.OutputConsole('Printed to {' + str(args[0][0]) + '}: \"' + msg + '\"')
         except:
             raise Error("Error posting message to display")
@@ -334,8 +262,8 @@ class Application(Frame):
     def Downtime(self, *args):
         self.OutputConsole("Downtime command causes errors - deprecated indefinitely.")
         return
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        wsObject.POST("api/v0/process_state/reason", json.dumps({"value" : str(args[0][1])}))
+        self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
+        self.ws.POST("api/v0/process_state/reason", json.dumps({"value" : str(args[0][1])}))
 
     # Outputs the help block
     def Help(self, *args):
@@ -357,14 +285,13 @@ Quit       - Quit Application"""
     # Starts continuous polling of a workstation
     # Gets the unrecognized scan and triggers actions
     def StartPolling(self, *args):
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
-        if wsObject.ip in self.runningApplications:
+        if self.ws.ip in self.runningApplications:
             self.OutputConsole('Polling already active at workstation: ' + str(args[0][0]))
         else:
-            newThread = threading.Thread(target=self.PollingLoop, args=(wsObject,))
+            newThread = threading.Thread(target=self.PollingLoop)
             newThread.start()
-            self.runningApplications.append(wsObject.ip)
-            self.OutputConsole('Started polling at ' + wsObject.ip)
+            self.runningApplications.append(self.ws.ip)
+            self.OutputConsole('Started polling at ' + self.ws.ip)
 
         return
 
@@ -376,48 +303,45 @@ Quit       - Quit Application"""
             self.OutputConsole('Stopped polling at all workstations.')
             return
         
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        if wsObject.ip in self.runningApplications:
-            self.runningApplications.remove(wsObject.ip)
-            self.OutputConsole('Stopped polling at workstation: ' + str(args[0][0]))
+        if self.ws.ip in self.runningApplications:
+            self.runningApplications.remove(self.ws.ip)
+            self.OutputConsole('Stopped polling at workstation: ' + self.ws.name)
         else:
-            self.OutputConsole('Not currently polling at workstation: ' + str(args[0][0]))
+            self.OutputConsole('Not currently polling at workstation: ' + self.ws.name)
         return
 
     # Constantly polls the WS and processes its last unrecognized scan
-    def PollingLoop(self, wsObject):
+    def PollingLoop(self):
         # Get latest unrecognized scan and store it in dict
-        self.runningApplicationsQueries[wsObject] = wsObject.GetScanID()
+        self.runningApplicationsQueries[self.ws] = self.ws.GetScanID()
 
         # Main poll loop
-        while wsObject.ip in self.runningApplications:
-            print("Polling at ", wsObject.ip)
-            self.HandleLastScan(wsObject, pollMode = True)
+        while self.ws.ip in self.runningApplications:
+            print("Polling at ", self.ws.ip)
+            self.HandleLastScan(pollMode = True)
             time.sleep(self.pollingDuration)
 
-        print("Done polling at", wsObject.ip)
+        print("Done polling at", self.ws.ip)
         return
 
     # Single poll command for a ws
     def PScan(self, *args):
-        wsname = str(args[0][0])
-        wsObject = WorkStation(data["workstations"][wsname]["ip"], name = wsname)
-        self.HandleLastScan(wsObject, pollMode = False)
+        self.HandleLastScan(pollMode = False)
         return
 
     # Handles the latest unrecognized scan
-    def HandleLastScan(self, wsObject, pollMode = False):
-        scannedText = wsObject.GetScan()
-        scanNumber = wsObject.GetScanID()
-        wsname = wsObject.name
+    def HandleLastScan(self, pollMode = False):
+        scannedText = self.ws.GetScan()
+        scanNumber = self.ws.GetScanID()
+        wsname = self.ws.name
 
         # Continuous polling behavior handling
         if pollMode:
             # if returned scan is equal to previous, do nothing
-            if scanNumber == self.runningApplicationsQueries[wsObject]:
+            if scanNumber == self.runningApplicationsQueries[self.ws]:
                 return
             else:
-                self.runningApplicationsQueries[wsObject] = scanNumber
+                self.runningApplicationsQueries[self.ws] = scanNumber
 
         self.OutputConsole("Last unrecognized scan: {content}".format(content = scannedText), printMode = not pollMode)
         
@@ -425,38 +349,38 @@ Quit       - Quit Application"""
         if scannedText[0:4] == '%CUS': # detect if custom tag
             self.OutputConsole("Detected custom command: " + scannedText[4:])
             CustomCommand = scannedText[4:]
-            self.RunScannedCommand(str(CustomCommand).upper(), wsname)
+            self.RunScannedCommand(str(CustomCommand).upper())
 
         elif scannedText[0] == 'S': # SN
             
             self.OutputConsole("Detected SN.")
-            self.ConvertSerialPartRun(wsObject, scannedText)
+            self.ConvertSerialPartRun(serialNum = scannedText)
         else:
             self.OutputConsole("Unrecognized barcode: " + scannedText)
         return
 
     # Runs a custom scanned command 
-    def RunScannedCommand(self, cmd, wsName):
+    def RunScannedCommand(self, cmd):
         cmd = str(cmd).rstrip()
-
+        nullArg = "***NULLARGUMENT_THIS_SHOULD_NOT_BE_USED"
         if cmd == "OPERATORS--":
-            self.Display(["run", wsName, "control"],)
+            self.Display(["run", nullArg,"control"],)
         elif cmd == "OPERATORS++":
-            self.SetPartNo(["test1", "Sample"])
+            self.SetPartNo(["Sample"])
         elif cmd == "TURNOFF":
-            self.Display(["turnoff", wsName])
+            self.Display(["turnoff"])
         elif cmd == "TURNON":
-            self.Display(["turnon", wsName])
+            self.Display(["turnon"])
         elif cmd == "OPENLINK1":
-            webbrowser.get("wb").open("https://www.google.com/")
+            webbrowser.get("wb").open("https://en.wikipedia.org/wiki/SCADA")
         elif cmd == "FUNTIMES":
-            self.Display(["run", wsName, "bounce2", 5],)
+            self.Display(["run", nullArg, "bounce2", 5],)
         else:
             self.OutputConsole("Warning: Command not found.")
 
     # Reads the last unrecognized scan
     # Converts to catalog number and starts a new part run
-    def ConvertSerialPartRun(self, ws, serialNum):
+    def ConvertSerialPartRun(self, serialNum):
         serialNumParsed = str(serialNum[1:]).rstrip()   # remove 'S' and '\r' from SN
         
         # Convert serial to catalog
@@ -464,14 +388,14 @@ Quit       - Quit Application"""
 
         # Check if current part run matches new part run
         # If true then cancel the part run (it's already running the part)
-        currentPartNo = ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
+        currentPartNo = self.ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
 
         if str(partNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(partNo) + "} is already in production.")
             return
 
         # Submit new part run based on catalog num
-        result = ws.SetPart(partNo)
+        result = self.ws.SetPart(partNo)
 
         if result:
             self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
