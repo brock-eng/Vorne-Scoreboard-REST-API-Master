@@ -7,6 +7,7 @@
 
 from tkinter import *
 import threading
+from datetime import datetime
 
 from workstation import *
 from ws_data import data
@@ -194,8 +195,8 @@ class Application(Frame):
             result = wsObject.Scoreboard.PrintImage(blankCanvas.Output())
             resultDisplay = wsObject.Scoreboard.SetImageMode('over')
             if not result:
-               raise NameError('Improper arguments called for \'display turnoff\' command')
-            if not resultDisplay:
+                raise NameError('Improper arguments called for \'display turnoff\' command')
+            elif not resultDisplay:
                 raise NameError('Error setting display mode to \'over\'')
             else:
                 self.OutputConsole('Turned off scoreboard display for ' + str(args[0][1]))
@@ -205,57 +206,44 @@ class Application(Frame):
         if str(args[0][0]).upper() == 'TURNON':
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
             resultDisplay = wsObject.Scoreboard.SetImageMode('none')
-            if not resultDisplay:
-               raise NameError('Error posting \'turnon\' to scoreboard.')
-            else:
-                self.OutputConsole('Turned on scoreboard display for ' + str(args[0][1]) + '.')
+            if not resultDisplay: raise NameError('Error posting \'turnon\' to scoreboard.')
+            else: self.OutputConsole('Turned on scoreboard display for ' + str(args[0][1]) + '.')
             return
 
+        # Run a custom program on the screen.
         if str(args[0][0]).upper() == 'RUN':
-            if str(args[0][1]) in self.runningPrograms:
-                self.runningPrograms[str(args[0][1])].Stop()
-                self.runningPrograms.pop(str(args[0][1]))
-                self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
+            wsName = str(args[0][1])
+            programName = str(args[0][2]).upper()
+            wsObject = WorkStation(data["workstations"][wsName]["ip"])
+            
+            # Stop currently runnin program if there is one
+            if wsName in self.runningPrograms:
+                self.runningPrograms[wsName].Stop()
+                self.runningPrograms.pop(wsName)
+                self.OutputConsole('Stopped program running at workstation: ' + wsName)
 
-            wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
-
+            newProgram = Program(wsName)
+            if len(args[0]) > 3: progArgs = (wsObject, args[0][3])
+            else: progArgs = (wsObject, )
+            programList = {
+                'BOUNCE'    : newProgram.BounceProgram,
+                'CONTROL'   : newProgram.ControlProgram,
+                'COUNT'     : newProgram.CountProgram,
+                'BOUNCE2'   : newProgram.Bounce2Program
+            }
+            if programName not in programList.keys():
+                raise NameError('Program name not found.')
+            
+            # if not set to image display, change to over
             if wsObject.Scoreboard.GetImageMode() != "over":
-                if not str(args[0][2] == 'COUNT'): 
+                if programName != 'COUNT': 
                     self.Display(["TURNOFF", args[0][1]])
 
-            if str(args[0][2]).upper() == 'BOUNCE':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.BounceProgram, args=(wsObject,))
-                newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Bounce program on ' + str(args[0][1]))
-                return
-            
-            elif str(args[0][2]).upper() == 'CONTROL':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.ControlProgram, args=(wsObject,))
-                newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Control program on ' + str(args[0][1]))
-                return
-                
-            elif str(args[0][2]).upper() == 'BOUNCE2':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.Bounce2Program, args=(wsObject, args[0][3]))
-                newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Bounce2 program on ' + str(args[0][1]))
-                return
-
-            elif str(args[0][2]).upper() == 'COUNT':
-                newProgram = Program(str(args[0][1]))
-                newThread = threading.Thread(target=newProgram.CountProgram, args=(wsObject, ))
-                newThread.start()
-                self.runningPrograms[str(args[0][1])] = newProgram
-                self.OutputConsole('Running Counting program on ' + str(args[0][1]))
-                return
-
-            raise NameError('Program name not found.')
+            newThread = threading.Thread(target=programList[programName], args=progArgs)
+            newThread.start()
+            self.runningPrograms[wsName] = newProgram
+            self.OutputConsole('Running {program_name} program on {ws}'.format(program_name = programName, ws = wsName))
+            return
 
         if str(args[0][0]).upper() == 'STOP':
             if str(args[0][1]) not in self.runningPrograms:
@@ -264,7 +252,6 @@ class Application(Frame):
             self.runningPrograms.pop(str(args[0][1]))
             self.OutputConsole('Stopped program running at workstation: ' + str(args[0][1]))
             return
-            
         
         raise NameError('Display subcommand not found: ' + str(args[0][0]))
 
