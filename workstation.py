@@ -1,22 +1,26 @@
 import requests
-import webbrowser
 
+import webbrowser
 import json
 import time
 from datetime import datetime
 import random
 
+sleep = lambda t: time.sleep(t)
+
+
+
 # Scoreboard specific methods (displaying text, etc.)
 class Scoreboard:
     def __init__(self, workstation) -> None:
         self.ws = workstation
+        return
     
     # Normal display message
     def Display(self, line1 = "", line2 = "", line3 = "", time=10) -> None:
         displayObject = self.CreateTextObject(line1, line2, line3, time)
-        # print(displayObject)
-        response = self.ws.POST("api/v0/scoreboard/overlay", json.dumps(displayObject))
-        print(datetime.now().strftime("%H:%M:%S"), ' - Display: ', response)
+        self.ws.POST("api/v0/scoreboard/overlay", json.dumps(displayObject))
+        return
 
     # Continuously prints some random characters to the screen
     def DisplayNonsense(self, line1 = "", line2 = "", line3 = "", time=10) -> None:
@@ -29,6 +33,8 @@ class Scoreboard:
             print('Display Nonsense: ' + str(i) + '-> ', response)
             sleep(timestep)
             i += 1
+        
+        return
 
     # Warning display message
     def PrintImage(self, byteInformation):
@@ -56,6 +62,7 @@ class Scoreboard:
     # Opens Scoreboard in the web browser
     def Open(self):
         webbrowser.open(self.ws.ip + '#!/view/scoreboard')
+        return
 
     # Creates a text dictionary object that displays on the scoreboard
     def CreateTextObject(self, line1 = "", line2 = "", line3 = "", time=10) -> dict:
@@ -75,6 +82,7 @@ class Scoreboard:
     def TurnOff(self):
         imageMapBytes = bytes(7860)
         self.SetImageMode(imageMapBytes)
+        return
 
 
 # Class that holds all API methods for interacting with a Workstations Vorne scoreboard
@@ -86,10 +94,12 @@ class WorkStation:
         self.Scoreboard = Scoreboard(self)
         self.name = name
         self.ip = 'http://' + ipAddress + '/'
+        return
 
     # Open the current scoreboard dashboard
     def Open(self):
         webbrowser.open(self.ip + '#!/view/tpt')
+        return
     
     # Returns GET http based on a query
     def GET(self, query, printToggle = False, jsonToggle = False):
@@ -115,7 +125,7 @@ class WorkStation:
             return requests.post(requestIP, setValue)
         else:
             return requests.post(requestIP, setValue, headers = headersIn)
-    
+
     # Set current part run based on part number
     def SetPart(self, PartNo, ideal = 20, takt = 30, \
         downTime = 60, changeOver = True, changeOverTarget = 60) -> bool:
@@ -137,7 +147,6 @@ class WorkStation:
         
         response = self.POST(vorneURL, json.dumps(partRunBase))
         responseCheck = (response.status_code == 200)
-
         return responseCheck, PartNo
 
     # Returns information on the last unrecognized barcode
@@ -153,6 +162,11 @@ class WorkStation:
         metadata = self.GET("api/v0/device", jsonToggle = True)
         return metadata["data"]["serial_unrecognized_count"]["value"]
 
+    # Pushes a count value to an input pin
+    def InputPin(self, pinNumber, count = 1):
+        response = self.POST("api/v0/inputs/" + str(pinNumber), json.dumps({"count": int(count)}))
+        return
+
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):
         response = self.GET("api/v0/process_state/active", printToggle=False, jsonToggle=True)
@@ -162,3 +176,4 @@ class WorkStation:
         print("Reason : " + response['data']['process_state_reason'])
         print("Time[s]: " + str(int(response['data']['elapsed'])))
         print("Time[m]: " + str(int(response['data']['elapsed'] / 60)))
+        return

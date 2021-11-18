@@ -1,11 +1,12 @@
 # End user branch for the vorne scoreboard tool.
 # This branch has reduced features and is mostly used
-# for polling a scoreboard and activating barcode commands
+# for polling a scoreboard and activating cuustom barcode commands
 
 from tkinter import *
 import threading
 import webbrowser
 import yaml
+import time
 
 from workstation import *
 from bytecanvas import *
@@ -168,37 +169,6 @@ class Application(Frame):
         
         raise NameError('Display subcommand not found: ' + str(args[0][0]))
 
-    # Sets a part run based on a serial number
-    def SetPartNo(self, *args):
-        # Set display to on if not already on
-        if self.ws.Scoreboard.GetImageMode() != "none":
-            self.Display(["TURNON"])
-
-        # set serial mode if serial tag is included in cmd
-        serial = True if "-serial" in args[0] else False    
-        changeOverMode = True if "-changeover" in args[0] else False
-        
-        if serial:
-            SerialNum = args[0][0]
-            PartNo = self.ConvertSerial(SerialNum)
-        else:
-            PartNo = args[0][0]
-
-        # Check if current part run matches new part run
-        # If true then cancel the part run (it's already running the part)
-        currentPartNo = self.ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
-        print(currentPartNo)
-
-        if str(PartNo) == str(currentPartNo):
-            self.OutputConsole("Did not set new part run: {" + str(PartNo) + "} is already in production.")
-            return
-
-        # Call set part command
-        postResult = self.ws.SetPart(PartNo, changeOver=changeOverMode)
-        
-        self.OutputConsole("Set {" + self.ws.name + "} part run to " + str(PartNo) + ".")
-        return
-
     # Print information about the current part run in the console
     def GetPartRun(self, *args):
         returnData = self.ws.GET("api/v0/part_run", jsonToggle=True)
@@ -309,21 +279,21 @@ class Application(Frame):
     # Runs a custom scanned command 
     def RunScannedCommand(self, cmd):
         cmd = str(cmd).rstrip()
-        nullArg = "***NULLARGUMENT_THIS_SHOULD_NOT_BE_USED"
-        if cmd == "OPERATORS--":
-            self.Display(["run", nullArg,"control"],)
-        elif cmd == "OPERATORS++":
+        nullArg = "***NULLARGUMENT_THIS_SHOULD_NOT_BE_USED***"
+        if cmd == "COUNTPROG":
+            self.Display(["run", nullArg,"count"],)
+        elif cmd == "SAMPLEPART":
             self.SetPartNo(["Sample"])
         elif cmd == "TURNOFF":
             self.Display(["turnoff"])
         elif cmd == "TURNON":
             self.Display(["turnon"])
         elif cmd == "OPENLINK1":
-            webbrowser.get("wb").open("https://en.wikipedia.org/wiki/SCADA")
+            webbrowser.get("wb").open(self.ws.ip)
         elif cmd == "FUNTIMES":
-            self.Display(["run", nullArg, "bounce2", 5],)
+            self.Display(["run", nullArg, "bounce2", 10],)
         else:
-            self.OutputConsole("Warning: Command not found.")
+            self.OutputConsole("Warning: Custom command not found: " + str(cmd))
 
     # Reads the last unrecognized scan
     # Converts to catalog number and starts a new part run
@@ -339,10 +309,11 @@ class Application(Frame):
 
         if str(partNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(partNo) + "} is already in production.")
+            # self.ws.Scoreboard.Display(line1 = str(partNo), line2="already running.")
             return
 
         # Submit new part run based on catalog num
-        result = self.ws.SetPart(partNo)
+        result = self.ws.SetPart(partNo, changeOver=True, changeOverTarget=360, ideal=360, takt=420, downTime=360 * 2)
 
         if result:
             self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
@@ -350,13 +321,37 @@ class Application(Frame):
             self.OutputConsole("Failed to convert serial to new part run.")
         return
 
+    # Sets a part run (For command line functionality)
+    def SetPartNo(self, *args):
+        # Set display to on if not already on
+        if self.ws.Scoreboard.GetImageMode() != "none":
+            self.Display(["TURNON"])
 
-    # Prints a sample serial to console
-    def PrintSampleSerial(self, *args):
-        serial = "I3993893"
-        self.root.clipboard_clear()
-        self.root.clipboard_append(serial)
-        self.OutputConsole("Copied sample serial to clipboard: " + serial)
+        # set serial mode if serial tag is included in cmd
+        serial = True if "-serial" in args[0] else False    
+        changeOverMode = True if "-changeover" in args[0] else False
+        
+        if serial:
+            SerialNum = args[0][0]
+            PartNo = self.ConvertSerial(SerialNum)
+        else:
+            PartNo = args[0][0]
+
+        # Check if current part run matches new part run
+        # If true then cancel the part run (it's already running the part)
+        currentPartNo = self.ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
+        print(currentPartNo)
+
+        if str(PartNo) == str(currentPartNo):
+            self.OutputConsole("Did not set new part run: {" + str(PartNo) + "} is already in production.")
+            # self.ws.Scoreboard.Display(line1 = str(PartNo), line2="already running.")
+            return
+
+        # Call set part command
+        postResult = self.ws.SetPart(PartNo, changeOver=changeOverMode)
+        
+        self.OutputConsole("Set {" + self.ws.name + "} part run to " + str(PartNo) + ".")
+        return
 
     # Grab a catalog number using the seats-api endpoint
     def ConvertSerial(self, serial):
