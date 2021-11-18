@@ -1,9 +1,14 @@
-from webbrowser import Error
+# Master control for vorne systems.
+# Provides command line-esque functionality for 
+# interacting with Vorne scoreboards
+# Should only be used by IT or Admin users
+#
+# Version 1.0
+
 from tkinter import *
 import threading
-import ctypes
 
-from classes import *
+from workstation import *
 from ws_data import data
 from bytecanvas import *
 from programs import Program
@@ -55,10 +60,6 @@ class Application(Frame):
 
     # App configuration settings
     def Configure(self):
-        # Set application as explicit
-        myappid = 'seatsinc.vorne_connection_tool' # arbitrary string
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        
         # Set webbrowser path (set to use chrome)
         browser_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
         #browser_path = "C:/Program Files/Internet Explorer/iexplore.exe"
@@ -112,6 +113,8 @@ class Application(Frame):
             'STOPPOLL'  : self.StopPolling,
             'POLLSTOP'  : self.StopPolling,
             'SERIAL'    : self.PrintSampleSerial,
+            'COUNT'     : self.PushCount,
+            'REJECT'    : self.PushReject,
             'STOP'      : self.OnClose,
             'QUIT'      : self.OnClose,
             'CLOSE'     : self.OnClose
@@ -217,7 +220,8 @@ class Application(Frame):
             wsObject = WorkStation(data["workstations"][args[0][1]]["ip"])
 
             if wsObject.Scoreboard.GetImageMode() != "over":
-                self.Display(["TURNOFF", args[0][1]])
+                if not str(args[0][2] == 'COUNT'): 
+                    self.Display(["TURNOFF", args[0][1]])
 
             if str(args[0][2]).upper() == 'BOUNCE':
                 newProgram = Program(str(args[0][1]))
@@ -241,6 +245,14 @@ class Application(Frame):
                 newThread.start()
                 self.runningPrograms[str(args[0][1])] = newProgram
                 self.OutputConsole('Running Bounce2 program on ' + str(args[0][1]))
+                return
+
+            elif str(args[0][2]).upper() == 'COUNT':
+                newProgram = Program(str(args[0][1]))
+                newThread = threading.Thread(target=newProgram.CountProgram, args=(wsObject, ))
+                newThread.start()
+                self.runningPrograms[str(args[0][1])] = newProgram
+                self.OutputConsole('Running Counting program on ' + str(args[0][1]))
                 return
 
             raise NameError('Program name not found.')
@@ -327,7 +339,7 @@ class Application(Frame):
             wsObject.Scoreboard.Display(msg)
             self.OutputConsole('Printed to {' + str(args[0][0]) + '}: \"' + msg + '\"')
         except:
-            raise Error("Error posting message to display")
+            raise IndexError("Error posting message to display")
         return
     
     # Disables active state detection and provides a downtime reason
@@ -351,9 +363,11 @@ Getpart    - Get info on the current part run
 Pscan      - Force a single read/command from a scoreboard
 Poll       - Start polling a scoreboard
 Stoppoll   - Stop polling a scoreboard
-Setstate   - Set the machine state
+Setstate   - Set the machine state (deprecated)
 Serial     - Copy a sample serial number to the clipboard
+Count      - Pushes a 'Good Count' event to a scoreboard
 Quit       - Quit Application"""
+
         self.OutputConsole(helpBlock)
         return
 
@@ -494,8 +508,24 @@ Quit       - Quit Application"""
     def ConvertSerial(self, serial):
         response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + serial + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
         try: partNo = response.json()['catalog_no']
-        except: raise Error("Could not find PartNo for given serial: {" + serial + "}")
+        except: raise IndexError("Could not find PartNo for given serial: {" + serial + "}")
         return partNo
+
+    # Pushes a single good count into a scoreboard
+    def PushCount(self, *args):
+        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
+        count = args[0][1]
+        wsObject.InputPin(1, count)
+        self.OutputConsole("Pushed good count of {count} to {name}".format(count=count, name = wsObject.name))
+        return
+
+    # Pushes a rejected count into a scoreboard
+    def PushReject(self, *args):
+        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
+        count = args[0][1]
+        wsObject.InputPin(2, count)
+        self.OutputConsole("Pushed rejected count of {count} to {name}".format(count=count, name = wsObject.name))
+        return
 
     # Run the application
     def Run(self):

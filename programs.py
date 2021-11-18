@@ -1,7 +1,7 @@
 import keyboard
 
 from bytecanvas import ByteCanvas
-from classes import *
+from workstation import *
 
 class Program:
     def __init__(self, name) -> None:
@@ -193,3 +193,29 @@ class Program:
             
             if keyboard.is_pressed('enter'):
                 deleteMode = not deleteMode
+
+    def CountProgram(self, WS):
+
+        while self.isRunning:
+            if keyboard.is_pressed('up'):
+                WS.InputPin(1, 1)
+                while keyboard.is_pressed('up') or keyboard.is_pressed('down'):
+                    pass
+            elif keyboard.is_pressed('down'):
+                WS.InputPin(2, 1)
+                while keyboard.is_pressed('up') or keyboard.is_pressed('down'):
+                    pass
+
+            elif keyboard.is_pressed('0'):
+                WS.Scoreboard.Display("this is a", "sample message", time=5)
+                while keyboard.is_pressed('up') or keyboard.is_pressed('down'):
+                    pass
+
+            elif keyboard.is_pressed('1'):
+                WS.Scoreboard.Display("you pressed the", "'1' key", time=5)
+                while keyboard.is_pressed('up') or keyboard.is_pressed('down'):
+                    pass
+
+
+                    
+            
