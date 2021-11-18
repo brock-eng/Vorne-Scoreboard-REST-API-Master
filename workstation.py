@@ -1,13 +1,10 @@
 import requests
 import webbrowser
+
 import json
 import time
 from datetime import datetime
 import random
-
-sleep = lambda t: time.sleep(t)
-
-
 
 # Scoreboard specific methods (displaying text, etc.)
 class Scoreboard:

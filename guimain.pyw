@@ -7,8 +7,7 @@ import threading
 import webbrowser
 import yaml
 
-from classes import *
-from ws_data import data
+from workstation import *
 from bytecanvas import *
 from programs import Program
 
@@ -43,12 +42,15 @@ class Application(Frame):
         self.root = Tk()
         
         # Creating Widgets
-        self.consoleOutputLabel = Label(text = 'Console Output')
+        self.connectionStatus = Label()
+        self.consoleOutputLabel = Label(text = 'Console Log')
         self.consoleOutput = Text()
         
         # Formatting Widgets
         self.root.iconbitmap('res\img\seats.ico')
+        self.connectionStatus.place(x = 0)
         self.consoleOutputLabel.place(x = 0)
+        self.connectionStatus.pack(fill = X)
         self.consoleOutputLabel.pack(fill = X)
         self.consoleOutput.pack(fill = BOTH)
         self.consoleOutput.configure(state=DISABLED)
@@ -71,6 +73,8 @@ class Application(Frame):
         self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
         return
 
+    def UpdateConnectionStatus(self, message):
+        self.connectionStatus.text
 
     # Output a console message
     def OutputConsole(self, message, printMode = True):
@@ -81,27 +85,6 @@ class Application(Frame):
         self.consoleOutput.insert(END, '\n')
         self.consoleOutput.see(END)
         self.consoleOutput.configure(state='disabled')
-
-    # Shows all currently entered workstations
-    def List(self, *args):
-        statusFlag = False
-        if len(args[0]) > 0:
-            for arg in args:
-                if arg[0] == '-status':
-                    statusFlag = True
-
-        for ws in data["workstations"]:
-            if (statusFlag):
-                try:
-                    response = ws.self.GET("api/v0/process_state/active", printToggle=False, jsonToggle=False)
-                    response = ' HTTP_STATUS/' + str(response.status_code)
-                except:
-                    response = ' HTTP_STATUS/NOT_FOUND'
-            else:
-                response = ''
-            
-            outputMessage = ws + ": IP/" + data["workstations"][ws]["ip"] + " - " + "Dept/" + data["workstations"][ws]["dept"] + response
-            self.OutputConsole(outputMessage)
 
     # Alters the current scoreboard display
     def Display(self, *args):
@@ -114,7 +97,7 @@ class Application(Frame):
             return
 
         if str(args[0][0]).upper() == 'TURNOFF':
-            if str(self.ws.name) in self.runningPrograms:
+            if str(self.ws.name) in self.runningPrograms.keys():
                 self.runningPrograms[self.ws.name].Stop()
                 self.runningPrograms.pop(self.ws.name)
                 self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
@@ -139,40 +122,6 @@ class Application(Frame):
                 self.OutputConsole('Turned on scoreboard display for ' + self.ws.name + '.')
             return
 
-        if str(args[0][0]).upper() == 'RUN':
-            if self.ws.name in self.runningPrograms:
-                self.runningPrograms[self.ws.name].Stop()
-                self.runningPrograms.pop(self.ws.name)
-                self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
-
-            if self.ws.Scoreboard.GetImageMode() != "over":
-                self.Display(["TURNOFF"])
-            
-            if str(args[0][2]).upper() == 'BOUNCE':
-                newProgram = Program(self.ws.name)
-                newThread = threading.Thread(target=newProgram.BounceProgram, args=(self.ws,))
-                newThread.start()
-                self.runningPrograms[self.ws.name] = newProgram
-                self.OutputConsole('Running Bounce program on ' + self.ws.name)
-                return
-            
-            elif str(args[0][2]).upper() == 'CONTROL':
-                newProgram = Program(self.ws.name)
-                newThread = threading.Thread(target=newProgram.ControlProgram, args=(self.ws,))
-                newThread.start()
-                self.runningPrograms[self.ws.name] = newProgram
-                self.OutputConsole('Running Control program on ' + self.ws.name)
-                return
-                
-            elif str(args[0][2]).upper() == 'BOUNCE2':
-                newProgram = Program(self.ws.name)
-                newThread = threading.Thread(target=newProgram.Bounce2Program, args=(self.ws, args[0][3]))
-                newThread.start()
-                self.runningPrograms[self.ws.name] = newProgram
-                self.OutputConsole('Running Bounce2 program on ' + self.ws.name)
-                return
-
-            raise NameError('Program name not found.')
 
         if str(args[0][0]).upper() == 'STOP':
             if self.ws.name not in self.runningPrograms:
@@ -182,6 +131,40 @@ class Application(Frame):
             self.OutputConsole('Stopped program running at workstation: ' + self.ws.name)
             return
             
+        # Run a custom program on the screen.
+        if str(args[0][0]).upper() == 'RUN':
+            wsName = self.ws.name
+            programName = str(args[0][2]).upper()
+            wsObject = self.ws
+            
+            # Stop currently runnin program if there is one
+            if wsName in self.runningPrograms:
+                self.runningPrograms[wsName].Stop()
+                self.runningPrograms.pop(wsName)
+                self.OutputConsole('Stopped program running at workstation: ' + wsName)
+
+            newProgram = Program(wsName)
+            if len(args[0]) > 3: progArgs = (wsObject, args[0][3])
+            else: progArgs = (wsObject, )
+            programList = {
+                'BOUNCE'    : newProgram.BounceProgram,
+                'CONTROL'   : newProgram.ControlProgram,
+                'COUNT'     : newProgram.CountProgram,
+                'BOUNCE2'   : newProgram.Bounce2Program
+            }
+            if programName not in programList.keys():
+                raise NameError('Program name not found.')
+            
+            # if not set to image display, change to over
+            if wsObject.Scoreboard.GetImageMode() != "over":
+                if programName != 'COUNT': 
+                    self.Display(["TURNOFF", args[0][1]])
+
+            newThread = threading.Thread(target=programList[programName], args=progArgs)
+            newThread.start()
+            self.runningPrograms[wsName] = newProgram
+            self.OutputConsole('Running {program_name} program on {ws}'.format(program_name = programName, ws = self.ws.name))
+            return
         
         raise NameError('Display subcommand not found: ' + str(args[0][0]))
 
@@ -218,7 +201,6 @@ class Application(Frame):
 
     # Print information about the current part run in the console
     def GetPartRun(self, *args):
-        self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
         returnData = self.ws.GET("api/v0/part_run", jsonToggle=True)
 
         self.OutputConsole("ID       : " + str(returnData["data"]["part_id"]))
@@ -233,7 +215,7 @@ class Application(Frame):
             raise NameError("OPEN cmd requires a workstation name")
         
         try:
-            webbrowser.get("wb").open(data["workstations"][args[0][0]]["ip"])
+            webbrowser.get("wb").open(self.ws.ip)
             self.OutputConsole("Opened workstation {name} in browser.".format(name = args[0]))
         except:
             raise NameError("Could not find path.")
@@ -241,45 +223,13 @@ class Application(Frame):
 
     # Send a one line string message to a display
     def Message(self, *args):
-        if (len(args[0]) == 0):
-            raise NameError("MESSAGE cmd requires a workstation name")
-        try:
-            self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
-    
-        except:
-            raise NameError("Workstation not found.")
-        
         msg = ' '.join(args[0][1:])
         
         try:
             self.ws.Scoreboard.Display(msg)
             self.OutputConsole('Printed to {' + str(args[0][0]) + '}: \"' + msg + '\"')
         except:
-            raise Error("Error posting message to display")
-        return
-    
-    # Disables active state detection and provides a downtime reason
-    def Downtime(self, *args):
-        self.OutputConsole("Downtime command causes errors - deprecated indefinitely.")
-        return
-        self.ws = WorkStation(data["workstations"][args[0][0]]["ip"])
-        self.ws.POST("api/v0/process_state/reason", json.dumps({"value" : str(args[0][1])}))
-
-    # Outputs the help block
-    def Help(self, *args):
-        helpBlock = """
-Commands:
-Help       - Lists all commands
-List       - Display all workstation data
-Msg        - Write a message to a WS
-Open       - Opens a WS in browser
-Display    - Display/scoreboard specific commands
-Setpart    - Change the current part run to a new part
-Getpart    - Get info on the current part run
-Serial     - Copy a sample serial number to the clipboard
-Setstate   - Set the machine state
-Quit       - Quit Application"""
-        self.OutputConsole(helpBlock)
+            raise TypeError("Error posting message to display")
         return
 
     # Starts continuous polling of a workstation
@@ -317,11 +267,8 @@ Quit       - Quit Application"""
 
         # Main poll loop
         while self.ws.ip in self.runningApplications:
-            print("Polling at ", self.ws.ip)
             self.HandleLastScan(pollMode = True)
             time.sleep(self.pollingDuration)
-
-        print("Done polling at", self.ws.ip)
         return
 
     # Single poll command for a ws
@@ -415,7 +362,7 @@ Quit       - Quit Application"""
     def ConvertSerial(self, serial):
         response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + serial + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
         try: partNo = response.json()['catalog_no']
-        except: raise Error("Could not find PartNo for given serial: {" + serial + "}")
+        except: raise TypeError("Could not find PartNo for given serial: {" + serial + "}")
         return partNo
 
     # Run the application
@@ -430,7 +377,7 @@ Quit       - Quit Application"""
         for app in self.runningApplications:
             self.runningApplications.remove(app)
         
-        time.sleep(self.pollingDuration * 1.25)
+        time.sleep(self.pollingDuration * 1.5)
         self.root.destroy()
 
         
