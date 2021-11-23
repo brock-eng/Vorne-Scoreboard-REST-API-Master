@@ -2,11 +2,12 @@
 # This branch has reduced features and is mostly used
 # for polling a scoreboard and activating cuustom barcode commands
 
-version = 1.2
+version = "1.3 (11/23/2021)"
 
 from tkinter import *
 import threading
 import webbrowser
+from requests.models import stream_decode_response_unicode
 import yaml
 import time
 
@@ -26,15 +27,14 @@ class Application(Frame):
 
         # Tracked Running Programs
         self.runningPrograms = dict()
-        self.runningApplications = list()
-        self.runningApplicationsQueries = dict()
+        
+        self.runningLoop = True
+        self.scanID = -1
         self.pollingDuration = 1
 
         # App title
         self.root.title('Seats-Vorne Control Server'.format(version=self.version))
 
-        # Start main control program
-        self.StartPolling([self.ws])
 
         # Startup Message
         self.OutputConsole('Running for workstation: {name} at ip {ip}'.format(name=self.ws.name, ip=self.ws.ip))
@@ -47,6 +47,9 @@ class Application(Frame):
 
         if self.debugMode:
             self.OutputConsole('Running in debug mode: Enhanced message reporting.')
+        
+        # Start main control program
+        self.StartPolling()
 
     # Builds and formats tkinter widgets
     def Build(self):
@@ -186,16 +189,6 @@ class Application(Frame):
         
         raise NameError('Display subcommand not found: ' + str(args[0][0]))
 
-    # Print information about the current part run in the console
-    def GetPartRun(self, *args):
-        returnData = self.ws.GET("api/v0/part_run", jsonToggle=True)
-
-        self.OutputConsole("ID       : " + str(returnData["data"]["part_id"]))
-        self.OutputConsole("Ideal (s): " + str(returnData["data"]["ideal_cycle_time"]))
-        self.OutputConsole("Takt  (s): " + str(returnData["data"]["takt_time"]))
-        self.OutputConsole("DT Thresh: " + str(returnData["data"]["down_threshold"]))
-        return
-
     # Opens a workstation in the browser
     def Open(self, *args):
         if (len(args[0]) == 0):
@@ -224,77 +217,58 @@ class Application(Frame):
     def StartPolling(self, *args):
         newThread = threading.Thread(target=self.PollingLoop)
         newThread.start()
-        self.runningApplications.append(self.ws.ip)
         self.OutputConsole('Started polling at ' + self.ws.ip)
-        return
-
-    # Stops the continuous polling of a workstation
-    # if the ws is currently polling
-    def StopPolling(self, *args):
-        if "-all" in args[0]:
-            self.runningApplications.clear()
-            self.OutputConsole('Stopped polling at all workstations.')
-            return
-        
-        if self.ws.ip in self.runningApplications:
-            self.runningApplications.remove(self.ws.ip)
-            self.OutputConsole('Stopped polling at workstation: ' + self.ws.name)
-        else:
-            self.OutputConsole('Not currently polling at workstation: ' + self.ws.name)
         return
 
     # Constantly polls the WS and processes its last unrecognized scan
     def PollingLoop(self):
         # Get latest unrecognized scan and store it in dict
         try:
-            self.runningApplicationsQueries[self.ws] = self.ws.GetScanID()
+            self.scanID = self.ws.GetScanID()
         except:
-            self.OutputConsole("WARNING: Failed to connect to scoreboard: " + self.ws.ip)
+            self.OutputConsole("Failed to connect to scoreboard: " + self.ws.ip)
+            self.connectionStatus.config(text="Not Connected {date}".format(date = datetime.now().strftime("%H:%M:%S")))
 
         # Main poll loop
-        while self.ws.ip in self.runningApplications:
+        while self.ws.active == True:
             try:
-                self.HandleLastScan(pollMode = True)
-                time.sleep(self.pollingDuration)
+                # Handle the last unrecognized scan
+                self.HandleLastScan()
 
                 # Keylogger support
                 if self.keyloggerMode:
                     scannedSerialYesNo, scannedSN = self.keylogger.RetrieveSN()
-                    if self.debugMode:
-                        self.OutputConsole(self.keylogger.PrintDebug())
+                    self.OutputConsole(self.keylogger.PrintDebug(), self.debugMode)
                     if scannedSerialYesNo:
                         self.ConvertSerialPartRun(scannedSN, parse=False)
-                    self.keylogger.PrintDebug()
+
+                time.sleep(self.pollingDuration)
+                self.connectionStatus.config(text="Connected {date}".format(date = datetime.now().strftime("%H:%M:%S")))
             except:
                 self.OutputConsole("Connection Error: " + self.ws.ip)
-
+                self.connectionStatus.config(text="Not Connected {date}".format(date = datetime.now().strftime("%H:%M:%S")))
+        
         return
 
     # Handles the latest unrecognized scan
-    def HandleLastScan(self, pollMode = False):
+    def HandleLastScan(self):
         scannedText = self.ws.GetScan()
         scanNumber = self.ws.GetScanID()
 
-        # Continuous polling behavior handling
-        if pollMode:
-            # if returned scan is equal to previous, do nothing
-            if scanNumber == self.runningApplicationsQueries[self.ws]:
-                return
-            else:
-                self.runningApplicationsQueries[self.ws] = scanNumber
-
-        self.OutputConsole("Last unrecognized scan: {content}".format(content = scannedText), printMode = not pollMode)
+        # if returned scan is equal to previous, do nothing
+        if scanNumber == self.scanID: return
+        else:   self.scanID = scanNumber
         
-        # Begin scannedText handling
+        # Custom commands
         if scannedText[0:4] == '%CUS': # detect if custom tag
             self.OutputConsole("Detected custom command: " + scannedText[4:])
             CustomCommand = scannedText[4:]
             self.RunScannedCommand(str(CustomCommand).upper())
 
+        # Serial numbers scanned into the Vorne
         elif scannedText[0] == 'S': # SN
-            
             self.OutputConsole("Detected SN: " + str(scannedText))
-            self.ConvertSerialPartRun(serialNum = scannedText)
+            self.ConvertSerialPartRun(serialNum = scannedText, parse=True)
         else:
             self.OutputConsole("Unrecognized barcode: " + scannedText)
         return
@@ -316,39 +290,34 @@ class Application(Frame):
 
         if str(partNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(partNo) + "} is already in production.")
-            self.OutputConsole("Incremented count by 1", self.debugMode)
-            self.ws.InputPin(1, 1)
-            # self.ws.Scoreboard.Display(line1 = str(partNo), line2="already running.")
+            self.IncreaseCount()
             return
 
+        # TODO: Add dynamic std. run factor
+        #
+        #
         # Submit new part run based on catalog num
         idealTime = 10 * 60
         result = self.ws.SetPart(partNo, changeOver=False, ideal=idealTime, takt=idealTime * 1.25, downTime=idealTime * 2)
-        self.OutputConsole("Incremented count by 1", self.debugMode)
 
-        # Increase count by one
-        self.ws.InputPin(1, 1)
-
-        if result: self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
-        else: self.OutputConsole("Failed to convert serial to new part run.")
+        if result: 
+            self.IncreaseCount()
+            self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
+        else: 
+            self.OutputConsole("Failed to convert serial to new part run.")
 
         return
 
+    # Increments the scoreboard count by a certain amount
+    def IncreaseCount(self, count = 1):
+        self.ws.InputPin(1, count)
+        self.OutputConsole("Incremented count by {count}", self.debugMode)
+
     # Sets a part run (For command line functionality)
-    def SetPartNo(self, *args):
+    def SetPartNo(self, PartNo):
         # Set display to on if not already on
         if self.ws.Scoreboard.GetImageMode() != "none":
             self.Display(["TURNON"])
-
-        # set serial mode if serial tag is included in cmd
-        serial = True if "-serial" in args[0] else False    
-        changeOverMode = True if "-changeover" in args[0] else False
-        
-        if serial:
-            SerialNum = args[0][0]
-            PartNo = self.ConvertSerial(SerialNum)
-        else:
-            PartNo = args[0][0]
 
         # Check if current part run matches new part run
         # If true then cancel the part run (it's already running the part)
@@ -356,11 +325,10 @@ class Application(Frame):
 
         if str(PartNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(PartNo) + "} is already in production.")
-            # self.ws.Scoreboard.Display(line1 = str(PartNo), line2="already running.")
             return
 
         # Call set part command
-        postResult = self.ws.SetPart(PartNo, changeOver=changeOverMode)
+        self.ws.SetPart(PartNo, changeOver=False)
         
         self.OutputConsole("Set {" + self.ws.name + "} part run to " + str(PartNo) + ".")
         return
@@ -404,10 +372,10 @@ class Application(Frame):
         for program in self.runningPrograms:
             self.runningPrograms[program].Stop()
 
-        for app in self.runningApplications:
-            self.runningApplications.remove(app)
+        self.ws.SetActiveState(False)
         
         time.sleep(self.pollingDuration * 1.5)
+
         self.root.destroy()
 
         

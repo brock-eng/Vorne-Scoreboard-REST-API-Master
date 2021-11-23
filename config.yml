@@ -4,7 +4,7 @@
 workstation: "7100"
 
 # Ip Address of scoreboard
-ipAddress: "10.19.15.24"
+ipAddress: "10.19.12.21"
 
 # Debug mode - set true to enable enhanced console logging
 debug_mode: False

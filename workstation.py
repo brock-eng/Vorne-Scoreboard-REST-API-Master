@@ -94,6 +94,7 @@ class WorkStation:
         self.Scoreboard = Scoreboard(self)
         self.name = name
         self.ip = 'http://' + ipAddress + '/'
+        self.active = True
         return
 
     # Open the current scoreboard dashboard
@@ -158,9 +159,9 @@ class WorkStation:
 
     # Returns the current scan id.
     # Used for determining if a new scan has taken place
-    def GetScanID(self):
+    def GetScanID(self) -> int:
         metadata = self.GET("api/v0/device", jsonToggle = True)
-        return metadata["data"]["serial_unrecognized_count"]["value"]
+        return int(metadata["data"]["serial_unrecognized_count"]["value"])
 
     # Pushes a count value to an input pin
     def InputPin(self, pinNumber, count = 1):
@@ -171,7 +172,12 @@ class WorkStation:
     def DowntimeReason(self, reason):
         self.POST("api/v0/process_state/reason", json.dumps({"value" : str(reason)}))
         return
-        
+
+    # Sets active to true/false
+    def SetActiveState(self, state):
+        self.active = state
+        return
+
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):
         response = self.GET("api/v0/process_state/active", printToggle=False, jsonToggle=True)
