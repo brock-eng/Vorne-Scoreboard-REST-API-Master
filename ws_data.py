@@ -16,9 +16,9 @@ data = {
         },
         "test1" : {
             "id"    : 2,
-            "ip"    : "10.19.15.24",
-            "dept"  : "Zach's Office",
-            "name"  : "Test Scoreboard"
+            "ip"    : "10.19.12.21",
+            "dept"  : "Final Assembly",
+            "name"  : "7100"
         },
         "sh" : {
             "id"    : 3,
