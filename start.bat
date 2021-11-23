@@ -1,5 +1,5 @@
 @echo off
 
 N:
-cd "N:\ZBrock\Vorne\VorneServer\Repo\guimain.pyw"
-start pythonw guimain.pyw
+cd "N:\ZBrock\Vorne\VorneServer\Repo\"
+start pythonw guimain_enduser.pyw

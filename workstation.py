@@ -167,6 +167,11 @@ class WorkStation:
         response = self.POST("api/v0/inputs/" + str(pinNumber), json.dumps({"count": int(count)}))
         return
 
+    # Sets the previous downtime reason
+    def DowntimeReason(self, reason):
+        self.POST("api/v0/process_state/reason", json.dumps({"value" : str(reason)}))
+        return
+        
     # Prints an overview of the current workstation, including state/reason/elapsed_time
     def PrintOverview(self):
         response = self.GET("api/v0/process_state/active", printToggle=False, jsonToggle=True)

@@ -6,12 +6,11 @@ workstation: "7100"
 # Ip Address of scoreboard
 ipAddress: "10.19.15.24"
 
-# Triggers polling on application startup
-# Should always be True unless debugging
-pollOnStart: True
+# Debug mode - set true to enable enhanced console logging
+debug_mode: False
 
-# Software version
-version: 1.0
+# Keylogger mode - set true to enable SN detection via key input
+keylogger_mode: True
 
 ### Browser Path
 # Chrome

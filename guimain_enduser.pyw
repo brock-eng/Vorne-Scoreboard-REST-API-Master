@@ -1,6 +1,8 @@
-# End user branch for the vorne scoreboard tool.
+### End user branch for the vorne scoreboard tool.
 # This branch has reduced features and is mostly used
 # for polling a scoreboard and activating cuustom barcode commands
+
+version = 1.2
 
 from tkinter import *
 import threading
@@ -8,6 +10,7 @@ import webbrowser
 import yaml
 import time
 
+from keylogger import *
 from workstation import *
 from bytecanvas import *
 from programs import Program
@@ -36,6 +39,14 @@ class Application(Frame):
         # Startup Message
         self.OutputConsole('Running for workstation: {name} at ip {ip}'.format(name=self.ws.name, ip=self.ws.ip))
         self.OutputConsole('Software Version: {version}'.format(version = self.version))
+        
+        if self.keyloggerMode:
+            self.OutputConsole('Running keylogger SN detection.')
+        else: 
+            self.OutputConsole('Keylogger disabled. (Enable via config file)')
+
+        if self.debugMode:
+            self.OutputConsole('Running in debug mode: Enhanced message reporting.')
 
     # Builds and formats tkinter widgets
     def Build(self):
@@ -61,10 +72,11 @@ class Application(Frame):
     # App configuration settings
     def Configure(self):
         # Opening config file and getting settings
+        self.version = version
         stream = open("config.yml", 'r')
         config = yaml.safe_load(stream)
         self.ws = WorkStation(ipAddress = config["ipAddress"], name = config["workstation"])
-        self.version = config["version"]
+        self.debugMode = config["debug_mode"]
 
         # Set webbrowser path (set to use chrome)
         browserPath = config["browserPath"]
@@ -72,10 +84,15 @@ class Application(Frame):
 
         # Keybinds / Handlers
         self.root.protocol("WM_DELETE_WINDOW", self.OnClose)
-        return
 
-    def UpdateConnectionStatus(self, message):
-        self.connectionStatus.text
+        # Start minimized
+        self.root.wm_state('iconic')
+        
+        # keylogger support
+        self.keyloggerMode = config["keylogger_mode"]
+        if self.keyloggerMode:
+            self.keylogger = KeyLogger()
+        return
 
     # Output a console message
     def OutputConsole(self, message, printMode = True):
@@ -205,14 +222,10 @@ class Application(Frame):
     # Starts continuous polling of a workstation
     # Gets the unrecognized scan and triggers actions
     def StartPolling(self, *args):
-        if self.ws.ip in self.runningApplications:
-            self.OutputConsole('Polling already active at workstation: ' + str(args[0][0]))
-        else:
-            newThread = threading.Thread(target=self.PollingLoop)
-            newThread.start()
-            self.runningApplications.append(self.ws.ip)
-            self.OutputConsole('Started polling at ' + self.ws.ip)
-
+        newThread = threading.Thread(target=self.PollingLoop)
+        newThread.start()
+        self.runningApplications.append(self.ws.ip)
+        self.OutputConsole('Started polling at ' + self.ws.ip)
         return
 
     # Stops the continuous polling of a workstation
@@ -233,24 +246,34 @@ class Application(Frame):
     # Constantly polls the WS and processes its last unrecognized scan
     def PollingLoop(self):
         # Get latest unrecognized scan and store it in dict
-        self.runningApplicationsQueries[self.ws] = self.ws.GetScanID()
+        try:
+            self.runningApplicationsQueries[self.ws] = self.ws.GetScanID()
+        except:
+            self.OutputConsole("WARNING: Failed to connect to scoreboard: " + self.ws.ip)
 
         # Main poll loop
         while self.ws.ip in self.runningApplications:
-            self.HandleLastScan(pollMode = True)
-            time.sleep(self.pollingDuration)
-        return
+            try:
+                self.HandleLastScan(pollMode = True)
+                time.sleep(self.pollingDuration)
 
-    # Single poll command for a ws
-    def PScan(self, *args):
-        self.HandleLastScan(pollMode = False)
+                # Keylogger support
+                if self.keyloggerMode:
+                    scannedSerialYesNo, scannedSN = self.keylogger.RetrieveSN()
+                    if self.debugMode:
+                        self.OutputConsole(self.keylogger.PrintDebug())
+                    if scannedSerialYesNo:
+                        self.ConvertSerialPartRun(scannedSN, parse=False)
+                    self.keylogger.PrintDebug()
+            except:
+                self.OutputConsole("Connection Error: " + self.ws.ip)
+
         return
 
     # Handles the latest unrecognized scan
     def HandleLastScan(self, pollMode = False):
         scannedText = self.ws.GetScan()
         scanNumber = self.ws.GetScanID()
-        wsname = self.ws.name
 
         # Continuous polling behavior handling
         if pollMode:
@@ -270,38 +293,22 @@ class Application(Frame):
 
         elif scannedText[0] == 'S': # SN
             
-            self.OutputConsole("Detected SN.")
+            self.OutputConsole("Detected SN: " + str(scannedText))
             self.ConvertSerialPartRun(serialNum = scannedText)
         else:
             self.OutputConsole("Unrecognized barcode: " + scannedText)
         return
 
-    # Runs a custom scanned command 
-    def RunScannedCommand(self, cmd):
-        cmd = str(cmd).rstrip()
-        nullArg = "***NULLARGUMENT_THIS_SHOULD_NOT_BE_USED***"
-        if cmd == "COUNTPROG":
-            self.Display(["run", nullArg,"count"],)
-        elif cmd == "SAMPLEPART":
-            self.SetPartNo(["Sample"])
-        elif cmd == "TURNOFF":
-            self.Display(["turnoff"])
-        elif cmd == "TURNON":
-            self.Display(["turnon"])
-        elif cmd == "OPENLINK1":
-            webbrowser.get("wb").open(self.ws.ip)
-        elif cmd == "FUNTIMES":
-            self.Display(["run", nullArg, "bounce2", 10],)
-        else:
-            self.OutputConsole("Warning: Custom command not found: " + str(cmd))
-
     # Reads the last unrecognized scan
     # Converts to catalog number and starts a new part run
-    def ConvertSerialPartRun(self, serialNum):
-        serialNumParsed = str(serialNum[1:]).rstrip()   # remove 'S' and '\r' from SN
-        
+    def ConvertSerialPartRun(self, serialNum, parse = True):
+        if parse:
+            serialNum = str(serialNum[1:]).rstrip()   # remove 'S' and '\r' from SN
+
         # Convert serial to catalog
-        partNo = self.ConvertSerial(serialNumParsed)
+        partNo = self.ConvertSerial(serialNum)
+        if partNo == -1:
+            return
 
         # Check if current part run matches new part run
         # If true then cancel the part run (it's already running the part)
@@ -309,16 +316,22 @@ class Application(Frame):
 
         if str(partNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(partNo) + "} is already in production.")
+            self.OutputConsole("Incremented count by 1", self.debugMode)
+            self.ws.InputPin(1, 1)
             # self.ws.Scoreboard.Display(line1 = str(partNo), line2="already running.")
             return
 
         # Submit new part run based on catalog num
-        result = self.ws.SetPart(partNo, changeOver=True, changeOverTarget=360, ideal=360, takt=420, downTime=360 * 2)
+        idealTime = 10 * 60
+        result = self.ws.SetPart(partNo, changeOver=False, ideal=idealTime, takt=idealTime * 1.25, downTime=idealTime * 2)
+        self.OutputConsole("Incremented count by 1", self.debugMode)
 
-        if result:
-            self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
-        else:
-            self.OutputConsole("Failed to convert serial to new part run.")
+        # Increase count by one
+        self.ws.InputPin(1, 1)
+
+        if result: self.OutputConsole("Converted Serial {SN} to new part run: {PN}".format(SN = serialNum, PN = partNo))
+        else: self.OutputConsole("Failed to convert serial to new part run.")
+
         return
 
     # Sets a part run (For command line functionality)
@@ -340,7 +353,6 @@ class Application(Frame):
         # Check if current part run matches new part run
         # If true then cancel the part run (it's already running the part)
         currentPartNo = self.ws.GET("api/v0/part_run", jsonToggle=True)["data"]["part_id"]
-        print(currentPartNo)
 
         if str(PartNo) == str(currentPartNo):
             self.OutputConsole("Did not set new part run: {" + str(PartNo) + "} is already in production.")
@@ -355,10 +367,33 @@ class Application(Frame):
 
     # Grab a catalog number using the seats-api endpoint
     def ConvertSerial(self, serial):
-        response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + serial + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
-        try: partNo = response.json()['catalog_no']
-        except: raise TypeError("Could not find PartNo for given serial: {" + serial + "}")
+        try: 
+            response = requests.get("https://seats-api.seatsinc.com/ords/api1/serial/json/?serialno=" + serial + "&pkey=RIB26OGS3R7VRcaRMbVM90mjza")
+            partNo = response.json()['catalog_no']
+        except: 
+            self.OutputConsole("Could not find PartNo for given serial: {" + serial + "}")
+            self.ws.Scoreboard.Display("Warning:", "Part not found for","SN: " + str(serial))
+            return -1
         return partNo
+
+    # Runs a custom scanned command 
+    def RunScannedCommand(self, cmd):
+        cmd = str(cmd).rstrip()
+        nullArg = "***NULLARGUMENT_THIS_SHOULD_NOT_BE_USED***"
+        if cmd == "COUNTPROG":
+            self.Display(["run", nullArg,"count"],)
+        elif cmd == "SAMPLEPART":
+            self.SetPartNo(["Sample"])
+        elif cmd == "TURNOFF":
+            self.Display(["turnoff"])
+        elif cmd == "TURNON":
+            self.Display(["turnon"])
+        elif cmd == "OPENLINK1":
+            webbrowser.get("wb").open(self.ws.ip)
+        elif cmd == "FUNTIMES":
+            self.Display(["run", nullArg, "bounce2", 10],)
+        else:
+            self.OutputConsole("Warning: Custom command not found: " + str(cmd))
 
     # Run the application
     def Run(self):
