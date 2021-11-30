@@ -14,7 +14,7 @@ data = {
             "dept"  : "Welding",
             "name"  : "Welding1"
         },
-        "test1" : {
+        "7100" : {
             "id"    : 2,
             "ip"    : "10.19.12.21",
             "dept"  : "Final Assembly",

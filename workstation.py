@@ -3,11 +3,10 @@ import requests
 import webbrowser
 import json
 import time
+from datetime import datetime
 import random
 
 sleep = lambda t: time.sleep(t)
-
-
 
 # Scoreboard specific methods (displaying text, etc.)
 class Scoreboard:
@@ -93,6 +92,7 @@ class WorkStation:
         self.Scoreboard = Scoreboard(self)
         self.name = name
         self.ip = 'http://' + ipAddress + '/'
+        self.active = True
         return
 
     # Open the current scoreboard dashboard
@@ -157,13 +157,38 @@ class WorkStation:
 
     # Returns the current scan id.
     # Used for determining if a new scan has taken place
-    def GetScanID(self):
+    def GetScanID(self) -> int:
         metadata = self.GET("api/v0/device", jsonToggle = True)
-        return metadata["data"]["serial_unrecognized_count"]["value"]
+        return int(metadata["data"]["serial_unrecognized_count"]["value"])
+
+    # Returns the current team size
+    def GetTeam(self) -> int:
+        metadata = self.GET("api/v0/team", jsonToggle = True)
+        return int(metadata["data"]["team_size"])
+        
+    # Sets a team size
+    def SetTeam(self, size):
+        self.POST("api/v0/team", json.dumps({"team_id" : str(size), "team_size" : int(size)}))
+        return
 
     # Pushes a count value to an input pin
     def InputPin(self, pinNumber, count = 1):
         response = self.POST("api/v0/inputs/" + str(pinNumber), json.dumps({"count": int(count)}))
+        return
+
+    # Gets the current process state
+    def GetProcessState(self) -> str:
+        metadata = self.GET("api/v0/process_state/active", jsonToggle=True)
+        return str(metadata["data"]["name"]), str(metadata["data"]["information_source"])
+
+    # Sets the previous downtime reason
+    def SetDowntimeReason(self, reason):
+        self.POST("api/v0/process_state/reason", json.dumps({"value" : str(reason)}))
+        return
+
+    # Sets active to true/false
+    def SetActiveState(self, state):
+        self.active = state
         return
 
     # Prints an overview of the current workstation, including state/reason/elapsed_time

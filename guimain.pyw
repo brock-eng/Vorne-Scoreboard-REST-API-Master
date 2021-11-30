@@ -108,6 +108,7 @@ class Application(Frame):
             'DISP'      : self.Display,
             'SETPART'   : self.SetPartNo,
             'GETPART'   : self.GetPartRun,
+            'GETSTATE'  : self.GetState,
             'DOWNTIME'  : self.Downtime,
             'PSCAN'     : self.PScan,
             'POLL'      : self.StartPolling,
@@ -297,6 +298,14 @@ class Application(Frame):
         self.OutputConsole("Takt  (s): " + str(returnData["data"]["takt_time"]))
         self.OutputConsole("DT Thresh: " + str(returnData["data"]["down_threshold"]))
         return
+
+    # Get the current process state
+    def GetState(self, *args):
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+        state, infoSource = wsObject.GetProcessState()
+        self.OutputConsole("Current state information for " + str(args[0][0]))
+        self.OutputConsole("State: " + state)
+        self.OutputConsole("InfoS: " + infoSource)
 
     # Opens a workstation in the browser
     def Open(self, *args):
