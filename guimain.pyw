@@ -384,17 +384,20 @@ Quit       - Quit Application"""
     # Stops the continuous polling of a workstation
     # if the ws is currently polling
     def StopPolling(self, *args):
-        if "-all" in args[0]:
-            self.runningApplications.clear()
-            self.OutputConsole('Stopped polling at all workstations.')
-            return
-        
-        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
-        if wsObject.ip in self.runningApplications:
-            self.runningApplications.remove(wsObject.ip)
-            self.OutputConsole('Stopped polling at workstation: ' + str(args[0][0]))
-        else:
-            self.OutputConsole('Not currently polling at workstation: ' + str(args[0][0]))
+        try:
+            if "-all" in args[0]:
+                self.runningApplications.clear()
+                self.OutputConsole('Stopped polling at all workstations.')
+                return
+            
+            wsObject = WorkStation(data["workstations"][args[0][0]]["ip"])
+            if wsObject.ip in self.runningApplications:
+                self.runningApplications.remove(wsObject.ip)
+                self.OutputConsole('Stopped polling at workstation: ' + str(args[0][0]))
+            else:
+                self.OutputConsole('Not currently polling at workstation: ' + str(args[0][0]))
+        except:
+            self.OutputConsole("Error encountered on poll stop.")
         return
 
     # Constantly polls the WS and processes its last unrecognized scan
