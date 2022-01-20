@@ -512,7 +512,7 @@ Quit       - Quit Application"""
 
     # Pushes a single good count into a scoreboard
     def PushCount(self, *args):
-        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
         count = args[0][1]
         wsObject.InputPin(1, count)
         self.OutputConsole("Pushed good count of {count} to {name}".format(count=count, name = wsObject.name))
@@ -520,7 +520,7 @@ Quit       - Quit Application"""
 
     # Pushes a rejected count into a scoreboard
     def PushReject(self, *args):
-        wsObject = wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
+        wsObject = WorkStation(data["workstations"][args[0][0]]["ip"], name=str(args[0][0]))
         count = args[0][1]
         wsObject.InputPin(2, count)
         self.OutputConsole("Pushed rejected count of {count} to {name}".format(count=count, name = wsObject.name))
