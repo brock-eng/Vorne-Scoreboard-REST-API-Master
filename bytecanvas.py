@@ -83,6 +83,7 @@ class ByteCanvas:
         yi = 1
         y = y1
 
+        
         if (dy < 0):
             yi = -1
             dy *= -1
